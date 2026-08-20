@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PID 控制演示器 · 四轴飞行器 1D 位置控制</title>
+<style>
+  :root{
+    --bg:#0b1018;
+    --bg2:#0e1520;
+    --card:#141d2b;
+    --card2:#101823;
+    --border:#23303f;
+    --border2:#2c3c4f;
+    --text:#e6edf4;
+    --muted:#8494a7;
+    --muted2:#5c6b7d;
+    --accent:#4dabf7;
+    --p:#ff6b6b;
+    --i:#da77f2;
+    --d:#4dabf7;
+    --cx:#74c0fc;
+    --ce:#ffd43b;
+    --cv:#69db7c;
+    --ca:#ff8787;
+    --goal:#51cf66;
+    --shadow:0 8px 28px rgba(0,0,0,.35);
+    --mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:system-ui,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:
+      radial-gradient(1200px 600px at 20% -10%, rgba(77,171,247,.08), transparent 60%),
+      radial-gradient(1000px 600px at 100% 0%, rgba(218,119,242,.07), transparent 55%),
+      linear-gradient(180deg,var(--bg2),var(--bg));
+    color:var(--text);
+    height:100vh;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+  }
+
+  /* ---------- 顶栏 ---------- */
+  header{
+    flex:none;
+    display:flex;
+    align-items:center;
+    gap:16px;
+    padding:10px 18px;
+    border-bottom:1px solid var(--border);
+    background:rgba(11,16,24,.72);
+    backdrop-filter:blur(8px);
+    flex-wrap:wrap;
+  }
+  .brand{display:flex;flex-direction:column;min-width:190px}
+  .brand h1{font-size:17px;font-weight:650;letter-spacing:.5px;display:flex;align-items:center;gap:8px}
+  .brand h1 .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+  .brand .sub{font-size:11px;color:var(--muted);margin-top:2px}
+  .formula{
+    flex:1;min-width:280px;text-align:center;
+    font-family:var(--mono);font-size:14.5px;color:var(--muted);
+    background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:7px 14px;
+  }
+  .formula b{font-weight:600}
+  .cp{color:var(--p)}.ci{color:var(--i)}.cd{color:var(--d)}
+  .formula .tag{font-size:10.5px;color:var(--muted2)}
+  .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  button{
+    font-family:inherit;font-size:12.5px;color:var(--text);
+    background:var(--card);border:1px solid var(--border2);border-radius:9px;
+    padding:7px 12px;cursor:pointer;transition:.15s;white-space:nowrap;
+  }
+  button:hover{border-color:var(--accent);background:#1a2637}
+  button:active{transform:translateY(1px)}
+  button.primary{background:linear-gradient(180deg,#1d4ed8,#1e40af);border-color:#2563eb;font-weight:600}
+  button.primary:hover{filter:brightness(1.1)}
+  button.ghost{background:transparent}
+
+  /* ---------- 主舞台 ---------- */
+  main{
+    flex:1 1 auto;min-height:0;
+    display:grid;grid-template-columns:minmax(320px,4fr) 6fr;
+    gap:14px;padding:14px 18px;
+  }
+  .card{
+    background:linear-gradient(180deg,var(--card),var(--card2));
+    border:1px solid var(--border);border-radius:16px;
+    box-shadow:var(--shadow);
+    display:flex;flex-direction:column;min-height:0;overflow:hidden;
+  }
+  .card-head{
+    flex:none;display:flex;align-items:center;gap:8px;
+    padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;color:var(--muted);
+  }
+  .card-head .tt{font-weight:600;color:var(--text);font-size:13.5px}
+  .card-head .sw{width:9px;height:9px;border-radius:3px}
+
+  /* 场景卡片 */
+  .scene-card{position:relative}
+  .scene-wrap{flex:1 1 auto;min-height:0;position:relative}
+  .scene-wrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .caption{
+    position:absolute;left:14px;right:14px;top:12px;z-index:5;
+    background:rgba(11,16,24,.9);border:1px solid var(--border2);border-radius:10px;
+    padding:9px 13px;font-size:13px;line-height:1.5;color:var(--text);
+    box-shadow:var(--shadow);backdrop-filter:blur(6px);
+  }
+  .caption .stage{color:var(--accent);font-weight:650;margin-right:8px;font-size:12px}
+  .scene-foot{flex:none;border-top:1px solid var(--border);padding:10px 14px;display:flex;flex-direction:column;gap:9px}
+  .readout{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{
+    flex:1 1 auto;min-width:74px;background:var(--card2);border:1px solid var(--border);
+    border-radius:9px;padding:5px 9px;display:flex;flex-direction:column;gap:1px;
+  }
+  .chip .k{font-size:10.5px;color:var(--muted)}
+  .chip .v{font-family:var(--mono);font-size:14px;font-weight:600}
+  .chip .v small{font-size:10px;color:var(--muted);font-weight:400}
+  .pbars{display:flex;flex-direction:column;gap:5px}
+  .pbar{display:flex;align-items:center;gap:8px;font-size:11px}
+  .pbar .nm{width:44px;color:var(--muted);flex:none}
+  .pbar .nm b{font-weight:650}
+  .pbar .track{flex:1;height:9px;background:#0a1119;border:1px solid var(--border);border-radius:5px;position:relative;overflow:hidden}
+  .pbar .track::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--border2)}
+  .pbar .fill{position:absolute;top:0;bottom:0;border-radius:4px;transition:left .06s linear,width .06s linear}
+  .fill.p{background:linear-gradient(90deg,#b83b3b,#ff6b6b)}
+  .fill.i{background:linear-gradient(90deg,#9c36c0,#da77f2)}
+  .fill.d{background:linear-gradient(90deg,#2b6cb0,#4dabf7)}
+  .pbar .val{width:76px;text-align:right;font-family:var(--mono);font-size:11.5px;color:var(--text);flex:none}
+
+  /* 图表卡片 */
+  .charts-card .charts-grid{
+    flex:1 1 auto;min-height:0;
+    display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:1px;
+    background:var(--border);
+  }
+  .chart{position:relative;background:var(--card2);min-width:0;min-height:0}
+  .chart canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .chart .legend{
+    position:absolute;right:10px;top:6px;z-index:2;font-size:11.5px;color:var(--muted);
+    display:flex;align-items:center;gap:5px;pointer-events:none;
+    background:rgba(10,17,25,.6);padding:2px 8px;border-radius:6px;border:1px solid var(--border);
+  }
+  .chart .legend .sw{width:8px;height:8px;border-radius:50%}
+
+  /* ---------- 控制区 ---------- */
+  footer{
+    flex:none;border-top:1px solid var(--border);
+    background:rgba(11,16,24,.6);
+    display:grid;grid-template-columns:340px 1fr;gap:16px;
+    padding:12px 18px 14px;
+  }
+  .panel-title{font-size:11px;color:var(--muted2);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px}
+  .presets .pills{display:flex;flex-wrap:wrap;gap:7px}
+  .presets .pill{font-size:12px;padding:6px 10px;border-radius:8px}
+  .presets .pill.active{border-color:var(--accent);color:#cfe6ff;background:#17263a}
+  .presets .demo-row{margin-top:9px;display:flex;gap:7px}
+  .sliders{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px 18px;align-content:start}
+  .slider{display:flex;flex-direction:column;gap:3px}
+  .slider-head{display:flex;align-items:center;gap:8px}
+  .slider-head label{font-size:12px;color:var(--muted);flex:none;display:flex;align-items:center;gap:6px}
+  .slider-head label .tg{font-size:9.5px;font-weight:700;padding:1px 5px;border-radius:4px;color:#fff}
+  .tg.p{background:var(--p)}.tg.i{background:var(--i)}.tg.d{background:var(--d)}
+  .slider-head .snum{
+    width:74px;background:var(--card2);border:1px solid var(--border2);border-radius:6px;
+    color:var(--text);font-family:var(--mono);font-size:12px;padding:3px 6px;text-align:right;
+  }
+  .slider-head .snum:focus{outline:none;border-color:var(--accent)}
+  .slider-head .unit{font-size:10.5px;color:var(--muted2);width:30px}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:22px;background:transparent;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:5px;border-radius:3px;background:#0a1119;border:1px solid var(--border2)}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:15px;height:15px;border-radius:50%;margin-top:-6px;
+    background:#fff;border:3px solid var(--accent);box-shadow:0 0 8px rgba(77,171,247,.6);transition:.1s;
+  }
+  input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.12)}
+  input[type=range]::-moz-range-track{height:5px;border-radius:3px;background:#0a1119;border:1px solid var(--border2)}
+  input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#fff;border:3px solid var(--accent)}
+
+  @media (max-width:900px){
+    body{overflow:auto;height:auto}
+    main{grid-template-columns:1fr;grid-template-rows:minmax(380px,46vh) minmax(420px,54vh)}
+    footer{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1><span class="dot"></span>PID 控制演示器</h1>
+    <div class="sub">四轴飞行器 · 1D 位置控制　|　P 看现在 · I 看过去 · D 看未来</div>
+  </div>
+  <div class="formula">
+    <b>a(t)</b> = <span class="cp"><b>Kp</b></span>·e(t) + <span class="ci"><b>Ki</b></span>·∫e(τ)dτ + <span class="cd"><b>Kd</b></span>·de/dt <span class="tag">（e = x − x₀，增益为负）</span>
+  </div>
+  <div class="actions">
+    <button id="playBtn" class="primary">⏸ 暂停</button>
+    <button id="resetBtn">↺ 重置</button>
+    <button id="snapBtn">📸 记录曲线</button>
+    <button id="clearBtn">🧹 清空曲线</button>
+  </div>
+</header>
+
+<main>
+  <section class="card scene-card">
+    <div class="card-head"><span class="sw" style="background:var(--goal)"></span><span class="tt">场景仿真</span><span style="margin-left:auto;font-size:11px">滚轮/拖拽滑杆微调参数 · 空格键暂停</span></div>
+    <div class="scene-wrap">
+      <canvas id="scene"></canvas>
+      <div class="caption" id="caption" style="display:none"></div>
+    </div>
+    <div class="scene-foot">
+      <div class="readout">
+        <div class="chip"><span class="k">位置 x</span><span class="v" id="rv-x" style="color:var(--cx)">0.00 <small>m</small></span></div>
+        <div class="chip"><span class="k">速度 v</span><span class="v" id="rv-v" style="color:var(--cv)">0.00 <small>m/s</small></span></div>
+        <div class="chip"><span class="k">加速度 a</span><span class="v" id="rv-a" style="color:var(--ca)">0.00 <small>m/s²</small></span></div>
+        <div class="chip"><span class="k">误差 e</span><span class="v" id="rv-e" style="color:var(--ce)">0.00 <small>m</small></span></div>
+        <div class="chip"><span class="k">积分 ∫e</span><span class="v" id="rv-i" style="color:var(--i)">0.00 <small>m·s</small></span></div>
+      </div>
+      <div class="pbars">
+        <div class="pbar"><span class="nm"><b style="color:var(--p)">P</b> 现在</span><div class="track"><div class="fill p" id="fill-p"></div></div><span class="val" id="val-p">0</span></div>
+        <div class="pbar"><span class="nm"><b style="color:var(--i)">I</b> 过去</span><div class="track"><div class="fill i" id="fill-i"></div></div><span class="val" id="val-i">0</span></div>
+        <div class="pbar"><span class="nm"><b style="color:var(--d)">D</b> 未来</span><div class="track"><div class="fill d" id="fill-d"></div></div><span class="val" id="val-d">0</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card charts-card">
+    <div class="card-head"><span class="sw" style="background:var(--accent)"></span><span class="tt">实时曲线</span><span style="margin-left:auto;font-size:11px">时间窗 10s · 📸 记录当前曲线并重跑以对比</span></div>
+    <div class="charts-grid">
+      <div class="chart"><div class="legend"><span class="sw" style="background:var(--cx)"></span>位置 x(t)</div><canvas id="cx"></canvas></div>
+      <div class="chart"><div class="legend"><span class="sw" style="background:var(--ce)"></span>误差 e(t)</div><canvas id="ce"></canvas></div>
+      <div class="chart"><div class="legend"><span class="sw" style="background:var(--cv)"></span>速度 v(t)</div><canvas id="cv"></canvas></div>
+      <div class="chart"><div class="legend"><span class="sw" style="background:var(--ca)"></span>加速度 a(t)</div><canvas id="ca"></canvas></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="presets">
+    <div class="panel-title">预设场景 · 点击即可跳转</div>
+    <div class="pills" id="pills"></div>
+    <div class="demo-row">
+      <button id="demoBtn" class="primary">▶ 自动演示全过程</button>
+      <button id="prevBtn">◀</button>
+      <button id="nextBtn">▶</button>
+    </div>
+  </div>
+  <div class="sliders" id="sliders"></div>
+</footer>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ================= 参数与状态 ================= */
+  const PARAMS = [
+    {key:'Kp',     label:'Kp 比例', tag:'p', min:-20,  max:0,   step:0.1,  def:-6,   unit:'',     dec:1},
+    {key:'Ki',     label:'Ki 积分', tag:'i', min:-5,   max:0,   step:0.05, def:0,    unit:'',     dec:2},
+    {key:'Kd',     label:'Kd 微分', tag:'d', min:-20,  max:0,   step:0.1,  def:-3,   unit:'',     dec:1},
+    {key:'dist',   label:'恒定外力', tag:'',  min:-10,  max:10,  step:0.1,  def:0,    unit:'m/s²', dec:1},
+    {key:'x0',     label:'目标位置', tag:'',  min:-3,   max:3,   step:0.1,  def:0,    unit:'m',    dec:1},
+    {key:'offset', label:'初始偏移', tag:'',  min:0,    max:6,   step:0.1,  def:4,    unit:'m',    dec:1},
+    {key:'speed',  label:'模拟速度', tag:'',  min:0.25, max:3,   step:0.05, def:1,    unit:'×',    dec:2},
+  ];
+
+  const DEMO = [
+    {name:'纯 P',        dur:3800, set:{Kp:-6, Ki:0,    Kd:0,   dist:0, x0:0, offset:4}, cap:'P 控制：只按当前误差出力 → 小球永远做简谐运动，停不下来'},
+    {name:'PD 欠阻尼',   dur:3800, set:{Kp:-6, Ki:0,    Kd:-1,  dist:0, x0:0, offset:4}, cap:'加入 D（微分），Kd 太小 → 仍会过冲，来回摆动几次才停下'},
+    {name:'PD 临界阻尼', dur:3800, set:{Kp:-6, Ki:0,    Kd:-4.9,dist:0, x0:0, offset:4}, cap:'Kd 适中 → 提前减速，几乎无过冲、快速停在目标位置'},
+    {name:'PD 过阻尼',   dur:3800, set:{Kp:-6, Ki:0,    Kd:-14, dist:0, x0:0, offset:4}, cap:'Kd 太大 → 还没到就“刹停”，只能缓慢爬向目标'},
+    {name:'恒力 + PD',   dur:4300, set:{Kp:-6, Ki:0,    Kd:-4.9,dist:5, x0:0, offset:4}, cap:'存在恒定外力（重力）时，PD 稳定后仍残留误差 → 稳态误差'},
+    {name:'恒力 + PID',  dur:5200, set:{Kp:-6, Ki:-0.8, Kd:-4.9,dist:5, x0:0, offset:4}, cap:'加入 I（积分）→ 累积误差持续出力，最终把稳态误差压到 0'},
+  ];
+
+  const S = {
+    x:0, v:0, I:0, t:0, runStart:0, e:0, a:0,
+    up:0, ui:0, ud:0, u:0,
+    Kp:-6, Ki:0, Kd:-3, dist:0, x0:0, offset:4, speed:1,
+    running:true, sampleAcc:0,
+  };
+
+  const PHYS_DT = 1/240, SAMPLE_DT = 1/60, WINDOW = 10, MAXLEN = 60*20;
+  const WORLD_HALF = 7;
+  const hist = { t:[], x:[], e:[], v:[], a:[] };
+  const ghosts = [];
+
+  /* ================= DOM ================= */
+  const $ = id => document.getElementById(id);
+  const sceneCanvas = $('scene');
+  const charts = {
+    x: $('cx'), e: $('ce'), v: $('cv'), a: $('ca'),
+  };
+
+  /* ================= Canvas 表面 ================= */
+  function surface(canvas){
+    let s = canvas._surf;
+    const r = canvas.getBoundingClientRect();
+    const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+    const dpr = window.devicePixelRatio || 1;
+    if(!s || s.w !== w || s.h !== h){
+      canvas.width = Math.round(r.width * dpr);
+      canvas.height = Math.round(r.height * dpr);
+      s = canvas._surf = { ctx: canvas.getContext('2d'), w, h, dpr };
+    }
+    s.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return s;
+  }
+
+  /* ================= 工具 ================= */
+  const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+  function fmt(v, d=2){ return v.toFixed(d); }
+
+  /* ================= 滑杆构建 ================= */
+  const sliderEls = {};
+  const slidersBox = $('sliders');
+  function applyParam(key, val, silent){
+    if(!silent) stopDemo();
+    S[key] = val;
+  }
+  function syncSliders(){
+    for(const p of PARAMS){
+      const el = sliderEls[p.key];
+      if(el){
+        el.range.value = S[p.key];
+        el.num.value = S[p.key].toFixed(p.dec);
+      }
+    }
+  }
+  for(const p of PARAMS){
+    const wrap = document.createElement('div');
+    wrap.className = 'slider';
+    const tg = p.tag ? `<span class="tg ${p.tag}">${p.tag.toUpperCase()}</span>` : '';
+    wrap.innerHTML =
+      `<div class="slider-head"><label>${tg}${p.label}</label>` +
+      `<input class="snum" type="number" step="${p.step}" min="${p.min}" max="${p.max}" value="${p.def}">` +
+      `<span class="unit">${p.unit}</span></div>` +
+      `<input class="srange" type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${p.def}">`;
+    const range = wrap.querySelector('.srange');
+    const num = wrap.querySelector('.snum');
+    let lock = false;
+    range.addEventListener('input', () => {
+      if(lock) return; lock = true;
+      const v = parseFloat(range.value);
+      num.value = v.toFixed(p.dec); lock = false;
+      applyParam(p.key, v);
+    });
+    num.addEventListener('input', () => {
+      if(lock) return; lock = true;
+      let v = parseFloat(num.value);
+      if(!isFinite(v)) v = p.def;
+      v = clamp(v, p.min, p.max);
+      range.value = v; lock = false;
+      applyParam(p.key, v);
+    });
+    sliderEls[p.key] = { range, num };
+    slidersBox.appendChild(wrap);
+  }
+
+  /* ================= 预设按钮 ================= */
+  const pillsBox = $('pills');
+  DEMO.forEach((d, i) => {
+    const b = document.createElement('button');
+    b.className = 'pill';
+    b.textContent = d.name;
+    b.addEventListener('click', () => {
+      stopDemo();
+      setParams(d.set);
+      reset();
+      markPill(i);
+    });
+    pillsBox.appendChild(b);
+  });
+  function markPill(i){
+    [...pillsBox.children].forEach((el, j) => el.classList.toggle('active', j === i));
+  }
+  function setParams(obj){
+    for(const k in obj) S[k] = obj[k];
+    syncSliders();
+  }
+
+  /* ================= 自动演示 ================= */
+  const demo = { active:false, idx:-1, start:0 };
+  const captionEl = $('caption');
+  function applyStage(i){
+    demo.idx = i; demo.start = performance.now();
+    setParams(DEMO[i].set);
+    reset();
+    markPill(i);
+    captionEl.style.display = 'block';
+    captionEl.innerHTML = `<span class="stage">阶段 ${i+1}/${DEMO.length} · ${DEMO[i].name}</span>${DEMO[i].cap}`;
+  }
+  function startDemo(){ demo.active = true; applyStage(0); $('demoBtn').textContent = '■ 停止演示'; }
+  function stopDemo(){
+    if(!demo.active) return;
+    demo.active = false;
+    captionEl.style.display = 'none';
+    $('demoBtn').textContent = '▶ 自动演示全过程';
+    markPill(-1);
+  }
+  function tickDemo(now){
+    if(!demo.active) return;
+    if(now - demo.start >= DEMO[demo.idx].dur){
+      if(demo.idx + 1 < DEMO.length) applyStage(demo.idx + 1);
+      else stopDemo();
+    }
+  }
+  $('demoBtn').addEventListener('click', () => demo.active ? stopDemo() : startDemo());
+  $('prevBtn').addEventListener('click', () => {
+    stopDemo();
+    const i = clamp((demo.idx < 0 ? 0 : demo.idx) - 1, 0, DEMO.length - 1);
+    setParams(DEMO[i].set); reset(); markPill(i);
+  });
+  $('nextBtn').addEventListener('click', () => {
+    stopDemo();
+    const i = clamp((demo.idx < 0 ? 0 : demo.idx) + 1, 0, DEMO.length - 1);
+    setParams(DEMO[i].set); reset(); markPill(i);
+  });
+
+  /* ================= 仿真 ================= */
+  function reset(){
+    S.t = 0; S.runStart = 0;
+    S.x = S.x0 + S.offset; S.v = 0; S.I = 0; S.e = 0; S.a = 0;
+    S.up = S.ui = S.ud = S.u = 0; S.sampleAcc = 0;
+    hist.t.length = 0; hist.x.length = 0; hist.e.length = 0; hist.v.length = 0; hist.a.length = 0;
+    S.running = true;
+    $('playBtn').textContent = '⏸ 暂停';
+  }
+  function clearAll(){
+    reset();
+    ghosts.length = 0;
+  }
+  function snapshot(){
+    if(hist.t.length < 4) return;
+    ghosts.push({
+      t: hist.t.slice(), x: hist.x.slice(), e: hist.e.slice(),
+      v: hist.v.slice(), a: hist.a.slice(),
+    });
+    reset();
+  }
+
+  function substep(dt){
+    const e = S.x - S.x0;
+    S.I += e * dt;
+    const up = S.Kp * e;
+    const ui = S.Ki * S.I;
+    const ud = S.Kd * S.v;
+    const u = up + ui + ud;
+    const a = u + S.dist;
+    S.v += a * dt;
+    S.x += S.v * dt;
+    S.I = clamp(S.I, -20, 20);
+    S.v = clamp(S.v, -40, 40);
+    S.x = clamp(S.x, -1000, 1000);
+    S.t += dt;
+    S.e = e; S.a = a; S.u = u; S.up = up; S.ui = ui; S.ud = ud;
+  }
+  function recordSample(){
+    const el = S.t - S.runStart;
+    hist.t.push(el); hist.x.push(S.x); hist.e.push(S.x - S.x0);
+    hist.v.push(S.v); hist.a.push(S.a);
+    if(hist.t.length > MAXLEN){
+      hist.t.shift(); hist.x.shift(); hist.e.shift(); hist.v.shift(); hist.a.shift();
+    }
+  }
+  function advance(realDt){
+    let sim = realDt * S.speed;
+    let guard = 0;
+    while(sim > 0 && guard++ < 4000){
+      const dt = Math.min(PHYS_DT, sim);
+      substep(dt);
+      sim -= dt;
+      S.sampleAcc += dt;
+      if(S.sampleAcc >= SAMPLE_DT){
+        S.sampleAcc -= SAMPLE_DT;
+        recordSample();
+      }
+    }
+  }
+
+  /* ================= 场景绘制 ================= */
+  function arrow(ctx, x0, y0, dx, color, label){
+    const x2 = x0 + dx, dir = Math.sign(dx) || 1;
+    ctx.strokeStyle = color; ctx.fillStyle = color;
+    ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x2, y0); ctx.stroke();
+    const hs = 7, hw = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(x2, y0); ctx.lineTo(x2 - dir*hs, y0 - hw); ctx.lineTo(x2 - dir*hs, y0 + hw);
+    ctx.closePath(); ctx.fill();
+    if(label){
+      ctx.font = '600 11px ' + getComputedStyle(document.body).fontFamily;
+      ctx.textAlign = dir > 0 ? 'left' : 'right';
+      ctx.fillText(label, x2 + dir*8, y0 + 4);
+    }
+  }
+
+  function drawScene(){
+    const s = surface(sceneCanvas);
+    const {ctx, w, h} = s;
+    ctx.clearRect(0, 0, w, h);
+
+    const padX = 34, top = 26, bot = 30;
+    const trackY = h * 0.55;
+    const scale = (w - padX*2) / (2*WORLD_HALF);
+    const px = xx => w/2 + (xx - S.x0) * scale;
+
+    // 背景网格
+    ctx.strokeStyle = 'rgba(255,255,255,.03)';
+    ctx.lineWidth = 1;
+    for(let gx = padX; gx <= w - padX; gx += 40){
+      ctx.beginPath(); ctx.moveTo(gx, top); ctx.lineTo(gx, h - bot); ctx.stroke();
+    }
+
+    // 轨道 + 刻度
+    ctx.strokeStyle = '#2c3c4f'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(padX, trackY); ctx.lineTo(w - padX, trackY); ctx.stroke();
+    ctx.font = '10px ' + getComputedStyle(document.body).fontFamily;
+    ctx.fillStyle = '#5c6b7d'; ctx.textAlign = 'center';
+    for(let m = -WORLD_HALF; m <= WORLD_HALF; m++){
+      if(m === 0) continue;
+      const gx = px(S.x0 + m);
+      if(gx < padX - 10 || gx > w - padX + 10) continue;
+      ctx.beginPath(); ctx.moveTo(gx, trackY - 3); ctx.lineTo(gx, trackY + 3); ctx.stroke();
+      ctx.fillText((m > 0 ? '+' : '') + m, gx, trackY + 14);
+    }
+
+    // 目标线 + 旗
+    const tx = px(S.x0);
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = 'rgba(81,207,102,.55)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(tx, top); ctx.lineTo(tx, h - bot); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = '#51cf66';
+    ctx.beginPath(); ctx.moveTo(tx, top); ctx.lineTo(tx, top + 16); ctx.lineTo(tx + 15, top + 7); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#a9f0b6'; ctx.font = '600 11px ' + getComputedStyle(document.body).fontFamily;
+    ctx.textAlign = 'left';
+    ctx.fillText('目标 x₀ = ' + fmt(S.x0, 1), tx + 7, top + 8);
+
+    // 恒定外力指示
+    if(Math.abs(S.dist) > 1e-6){
+      const dir = Math.sign(S.dist);
+      ctx.strokeStyle = 'rgba(255,171,64,.7)'; ctx.fillStyle = 'rgba(255,171,64,.8)';
+      ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+      for(let k = 0; k < 5; k++){
+        const ax = padX + 40 + k * ((w - padX*2 - 80) / 4);
+        const ay = h - bot + 14;
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + dir*14, ay); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(ax + dir*14, ay); ctx.lineTo(ax + dir*9, ay - 3); ctx.lineTo(ax + dir*9, ay + 3);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.fillStyle = '#ffab40'; ctx.font = '10.5px ' + getComputedStyle(document.body).fontFamily;
+      ctx.textAlign = 'right';
+      ctx.fillText('恒定外力 ' + fmt(S.dist, 1) + ' m/s²', w - padX, h - bot + 17);
+    }
+
+    // 误差虚线
+    const bx = px(S.x);
+    ctx.save();
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = 'rgba(255,212,59,.85)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(tx, trackY - 26); ctx.lineTo(bx, trackY - 26); ctx.stroke();
+    ctx.restore();
+
+    // 运动轨迹（拖尾）
+    const TRAIL = 36;
+    for(let i = 0; i < TRAIL; i++){
+      const idx = hist.x.length - 1 - i;
+      if(idx < 0) break;
+      const alpha = (1 - i / TRAIL) * 0.32;
+      const tpx = px(hist.x[idx]);
+      ctx.fillStyle = 'rgba(116,192,252,' + alpha.toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(tpx, trackY, 3.2 * (1 - i/TRAIL*0.7), 0, Math.PI*2); ctx.fill();
+    }
+
+    // 小球
+    const R = 15;
+    const grad = ctx.createRadialGradient(bx - R*0.35, trackY - R*0.4, R*0.2, bx, trackY, R);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.35, '#9ecbff');
+    grad.addColorStop(1, '#2f6fb0');
+    ctx.save();
+    ctx.shadowColor = 'rgba(77,171,247,.7)'; ctx.shadowBlur = 18;
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(bx, trackY, R, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(bx, trackY, R, 0, Math.PI*2); ctx.stroke();
+    // 高光
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.beginPath(); ctx.arc(bx - R*0.3, trackY - R*0.4, R*0.22, 0, Math.PI*2); ctx.fill();
+
+    // 加速度箭头（下方，橙色）
+    const aLen = clamp(Math.abs(S.a), 0, 20) / 20 * 66;
+    if(Math.abs(S.a) > 0.05){
+      arrow(ctx, bx, trackY + R + 18, Math.sign(S.a) * aLen, '#ffab40', 'a=' + fmt(S.a, 1));
+    }
+    // 速度箭头（上方，绿色）
+    const vLen = clamp(Math.abs(S.v), 0, 8) / 8 * 44;
+    if(Math.abs(S.v) > 0.03){
+      arrow(ctx, bx, trackY - R - 16, Math.sign(S.v) * vLen, '#69db7c', 'v=' + fmt(S.v, 1));
+    }
+
+    // 误差数值
+    if(Math.abs(S.e) > 0.01){
+      ctx.fillStyle = '#ffd43b'; ctx.font = '600 11px ' + getComputedStyle(document.body).fontFamily;
+      ctx.textAlign = 'center';
+      ctx.fillText('e = ' + fmt(S.e, 2) + ' m', (tx + bx)/2, trackY - 32);
+    }
+  }
+
+  /* ================= 图表绘制 ================= */
+  function chartRange(tt, yy, refLine, winStart, winEnd){
+    let mn = Infinity, mx = -Infinity;
+    for(let i = 0; i < tt.length; i++){
+      if(tt[i] < winStart - 1e-6) continue;
+      if(tt[i] > winEnd + 1e-6) break;
+      if(yy[i] < mn) mn = yy[i];
+      if(yy[i] > mx) mx = yy[i];
+    }
+    if(refLine !== null){
+      if(refLine < mn) mn = refLine;
+      if(refLine > mx) mx = refLine;
+    }
+    if(!isFinite(mn) || !isFinite(mx)){ mn = -1; mx = 1; }
+    if(mx - mn < 1e-6){ mn -= 1; mx += 1; }
+    const pad = (mx - mn) * 0.12;
+    return [mn - pad, mx + pad];
+  }
+
+  function drawCurve(ctx, tt, yy, winStart, winEnd, plot, color, width, alpha){
+    const {x0, y0, w, h} = plot;
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = width;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    let started = false;
+    for(let i = 0; i < tt.length; i++){
+      const t = tt[i];
+      if(t < winStart - 1e-6) continue;
+      if(t > winEnd + 1e-6) break;
+      const sx = x0 + (t - winStart) / (winEnd - winStart) * w;
+      const sy = y0 + h * 0.5 - (yy[i] - plot.mn) / (plot.mx - plot.mn) * h;
+      if(!started){ ctx.moveTo(sx, sy); started = true; }
+      else ctx.lineTo(sx, sy);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawChart(canvas, yData, color, refLine, refColor){
+    const s = surface(canvas);
+    const {ctx, w, h} = s;
+    ctx.clearRect(0, 0, w, h);
+
+    const padL = 44, padR = 12, padT = 10, padB = 16;
+    const pw = w - padL - padR, ph = h - padT - padB;
+    if(pw < 10 || ph < 10) return;
+
+    const elapsedNow = S.t - S.runStart;
+    const winEnd = Math.max(elapsedNow, 1e-3);
+    const winStart = Math.max(0, winEnd - WINDOW);
+    const span = Math.max(winEnd - winStart, 0.02);
+
+    const [mn, mx] = chartRange(hist.t, yData, refLine, winStart, winEnd);
+    const plot = { x0: padL, y0: padT, w: pw, h: ph, mn, mx };
+
+    // 网格 + 刻度
+    ctx.font = '9.5px ' + getComputedStyle(document.body).fontFamily;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for(let g = 0; g <= 4; g++){
+      const val = mx - (mx - mn) * g / 4;
+      const gy = padT + ph * g / 4;
+      ctx.strokeStyle = g === 2 ? 'rgba(255,255,255,.10)' : 'rgba(255,255,255,.05)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(w - padR, gy); ctx.stroke();
+      ctx.fillStyle = '#5c6b7d';
+      const label = Math.abs(val) >= 100 ? val.toFixed(0) : (Math.abs(val) >= 10 ? val.toFixed(0) : val.toFixed(1));
+      ctx.fillText(label, padL - 5, gy);
+    }
+    ctx.textBaseline = 'alphabetic';
+
+    // 参考线（目标 / 零点）
+    if(refLine !== null){
+      const ry = padT + ph * 0.5 - (refLine - mn) / (mx - mn) * ph;
+      ctx.save();
+      ctx.setLineDash([5, 4]);
+      ctx.strokeStyle = refColor; ctx.globalAlpha = 0.6; ctx.lineWidth = 1.1;
+      ctx.beginPath(); ctx.moveTo(padL, ry); ctx.lineTo(w - padR, ry); ctx.stroke();
+      ctx.restore();
+    }
+
+    // 幽灵对比曲线（与当前曲线共用同一 Y 轴刻度，便于对比）
+    for(const gh of ghosts){
+      drawCurve(ctx, gh.t, yDataKey(gh, yData), winStart, winEnd, plot, '#ffffff', 1.3, 0.14);
+    }
+
+    // 主曲线
+    drawCurve(ctx, hist.t, yData, winStart, winEnd, plot, color, 2.1, 1);
+
+    // “现在”竖线
+    ctx.strokeStyle = 'rgba(255,255,255,.20)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(w - padR, padT); ctx.lineTo(w - padR, h - padB); ctx.stroke();
+  }
+  function yDataKey(gh, liveArr){
+    if(liveArr === hist.x) return gh.x;
+    if(liveArr === hist.e) return gh.e;
+    if(liveArr === hist.v) return gh.v;
+    return gh.a;
+  }
+
+  /* ================= 读数与出力条 ================= */
+  function updateReadout(){
+    $('rv-x').innerHTML = fmt(S.x, 2) + ' <small>m</small>';
+    $('rv-v').innerHTML = fmt(S.v, 2) + ' <small>m/s</small>';
+    $('rv-a').innerHTML = fmt(S.a, 2) + ' <small>m/s²</small>';
+    $('rv-e').innerHTML = fmt(S.e, 2) + ' <small>m</small>';
+    $('rv-i').innerHTML = fmt(S.I, 2) + ' <small>m·s</small>';
+
+    const maxAbs = Math.max(Math.abs(S.up), Math.abs(S.ui), Math.abs(S.ud), 0.5);
+    setBar('fill-p', 'val-p', S.up, maxAbs);
+    setBar('fill-i', 'val-i', S.ui, maxAbs);
+    setBar('fill-d', 'val-d', S.ud, maxAbs);
+    $('val-p').textContent = 'P=' + fmt(S.up, 1);
+    $('val-i').textContent = 'I=' + fmt(S.ui, 1);
+    $('val-d').textContent = 'D=' + fmt(S.ud, 1);
+  }
+  function setBar(fillId, valId, v, maxAbs){
+    const fill = $(fillId);
+    const frac = clamp(Math.abs(v) / maxAbs, 0, 1) * 50;
+    if(v >= 0){ fill.style.left = '50%'; fill.style.width = frac + '%'; }
+    else { fill.style.left = (50 - frac) + '%'; fill.style.width = frac + '%'; }
+  }
+
+  /* ================= 主循环 ================= */
+  let lastNow = performance.now();
+  function frame(now){
+    let real = Math.min(0.05, (now - lastNow) / 1000);
+    lastNow = now;
+    if(S.running) advance(real);
+    tickDemo(now);
+
+    drawScene();
+    drawChart(charts.x, hist.x, '#74c0fc', S.x0, '#51cf66');
+    drawChart(charts.e, hist.e, '#ffd43b', 0, 'rgba(255,255,255,.25)');
+    drawChart(charts.v, hist.v, '#69db7c', 0, 'rgba(255,255,255,.25)');
+    drawChart(charts.a, hist.a, '#ff8787', 0, 'rgba(255,255,255,.25)');
+    updateReadout();
+
+    requestAnimationFrame(frame);
+  }
+
+  /* ================= 事件 ================= */
+  $('playBtn').addEventListener('click', () => {
+    S.running = !S.running;
+    $('playBtn').textContent = S.running ? '⏸ 暂停' : '▶ 播放';
+  });
+  $('resetBtn').addEventListener('click', () => { stopDemo(); reset(); markPill(-1); });
+  $('clearBtn').addEventListener('click', clearAll);
+  $('snapBtn').addEventListener('click', snapshot);
+  window.addEventListener('keydown', e => {
+    if(e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if(e.code === 'Space'){ e.preventDefault(); $('playBtn').click(); }
+    else if(e.key === 'r' || e.key === 'R'){ $('resetBtn').click(); }
+  });
+
+  /* ================= 启动 ================= */
+  reset();
+  syncSliders();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

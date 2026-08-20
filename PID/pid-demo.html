@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PID 控制算法 · 交互演示</title>
+<style>
+  :root{
+    --bg:#14161c;
+    --panel:#1e222c;
+    --line:#323946;
+    --text:#e8ebf2;
+    --muted:#9aa4b0;
+    --accent:#7aa2ff;
+    --red:#ff6b6b;
+    --green:#2ecc71;
+    --blue:#5ea0ff;
+    --grey:#9aa4b0;
+    --amber:#ffd166;
+    --teal:#4ecdc4;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg);
+    background-image:linear-gradient(160deg,#181b22 0%,#101218 100%);
+    color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+    font-size:14px;
+  }
+  .wrap{max-width:1360px;margin:0 auto;padding:14px 16px 28px}
+  header.top{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:10px}
+  header.top h1{margin:0;font-size:22px;font-weight:700}
+  header.top h1 .note{color:var(--muted);font-weight:400}
+  header.top .tag{font-size:12px;color:var(--muted);border:1px solid var(--line);padding:3px 8px;border-radius:20px}
+  .formula-bar{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:10px 14px;margin-bottom:12px;font-size:15px;
+  }
+  .formula-bar b{font-weight:600}
+  .formula-bar .sub{color:var(--muted);font-size:12px;margin-top:4px}
+  .formula-bar .live{font-size:13px;margin-top:6px;font-family:Consolas,Menlo,monospace}
+  main{
+    display:grid;grid-template-columns:1.08fr 1fr;gap:12px;
+    margin-bottom:12px;
+  }
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+  .card h3{margin:0 0 8px;font-size:13px;color:var(--muted);font-weight:600}
+  .stage{position:relative;height:clamp(430px,58vh,660px);background:#181b22;border-radius:10px;overflow:hidden}
+  .stage canvas{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--muted)}
+  .legend .chip{display:flex;align-items:center;gap:5px}
+  .legend .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .readouts{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;
+  }
+  .ro{background:#14161c;border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+  .ro .k{font-size:11px;color:var(--muted)}
+  .ro .v{font-size:15px;font-weight:700;font-family:Consolas,Menlo,monospace}
+  .ro .u{font-size:11px;color:var(--muted)}
+  #charts{background:#181b22}
+  .controls{margin-bottom:12px}
+  .controls .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:8px}
+  .controls .preset-btn{
+    background:#14161c;color:var(--text);border:1px solid var(--line);
+    padding:7px 12px;border-radius:8px;cursor:pointer;font-size:13px;
+  }
+  .controls .preset-btn:hover{border-color:var(--accent);color:#fff}
+  .controls .preset-btn.active{border-color:var(--accent);background:#1d2738;color:#cfe0ff}
+  button.action{
+    background:#232939;color:var(--text);border:1px solid var(--line);
+    padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;
+  }
+  button.action:hover{border-color:var(--accent)}
+  button.action.run{background:#1d5c43}
+  .sliders{display:grid;grid-template-columns:repeat(3,minmax(150px,1fr));gap:10px}
+  .slider-box{background:#14161c;border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+  .slider-box .head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+  .slider-box .name{font-size:13px;font-weight:600}
+  .slider-box .val{font-family:Consolas,Menlo,monospace;color:var(--muted);font-size:13px}
+  .slider-box input[type=range]{width:100%;accent-color:var(--accent)}
+  .toggles{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+  .toggles label{display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
+  .note-hint{font-size:12px;color:var(--muted);background:#14161c;border:1px solid var(--line);border-radius:8px;padding:5px 10px;margin-top:6px}
+  .explain{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:12px 14px;font-size:13.5px;line-height:1.7
+  }
+  .explain .ref{color:var(--accent);font-size:12px;margin-top:4px}
+  .explain b{color:var(--amber)}
+  footer.bottom{color:var(--muted);font-size:12px;margin-top:14px;text-align:center}
+  @media (max-width:920px){
+    main{grid-template-columns:1fr}
+    .sliders{grid-template-columns:1fr 1fr}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>PID 控制算法 <span class="note">· 交互演示</span></h1>
+    <span class="tag">四轴飞行器 · 学习工具</span>
+  </header>
+
+  <div class="formula-bar">
+    <div>
+      <b>控制律</b> &nbsp; a(t) = K<sub>p</sub>·e(t) + K<sub>i</sub>·∫<sub>0</sub><sup>t</sup>e(τ)dτ + K<sub>d</sub>·de(t)/dt
+      &nbsp;&nbsp;&nbsp; 误差 <b>e(t) = x(t) − x<sub>0</sub></b>
+    </div>
+    <div class="sub">竖直轴上，小球当前位置 x(t)，目标位置 x<sub>0</sub>（青色虚线）。小球下面的力箭头即“输出加速度”。</div>
+    <div class="live" id="formula"></div>
+  </div>
+
+  <main>
+    <section class="card">
+      <h3>位置 — 世界（垂直轴）</h3>
+      <div class="stage">
+        <canvas id="world"></canvas>
+      </div>
+      <div class="legend">
+        <span class="chip"><span class="dot" style="background:#ffd166"></span>小球 x(t)</span>
+        <span class="chip"><span class="dot" style="background:#4ecdc4"></span>目标 x₀</span>
+        <span class="chip"><span class="dot" style="background:#ff6b6b"></span>P 比例项</span>
+        <span class="chip"><span class="dot" style="background:#2ecc71"></span>I 积分项</span>
+        <span class="chip"><span class="dot" style="background:#5ea0ff"></span>D 微分项</span>
+        <span class="chip"><span class="dot" style="background:#9aa4b0"></span>重力 g</span>
+        <span style="margin-left:auto">点击画面 = 设定新目标点</span>
+      </div>
+      <div class="readouts">
+        <div class="ro"><div class="k">误差 e(t) = x−x₀</div><div><span class="v" id="roE">--</span> <span class="u">m</span></div></div>
+        <div class="ro"><div class="k">速度 v(t) = de/dt</div><div><span class="v" id="roV">--</span> <span class="u">m/s</span></div></div>
+        <div class="ro"><div class="k">积分 ∫e dτ</div><div><span class="v" id="roI">--</span> <span class="u">m·s</span></div></div>
+        <div class="ro"><div class="k">物理加速度 a(t)</div><div><span class="v" id="roA">--</span> <span class="u">m/s²</span></div></div>
+        <div class="ro" style="grid-column:span 2">
+          <div class="k">各分项输出（m/s²）</div>
+          <div class="v" id="uTerms" style="font-size:13px">--</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>四条曲线：x(t) · e(t) · v(t) · a(t)</h3>
+      <div class="stage">
+        <canvas id="charts"></canvas>
+      </div>
+      <div class="legend">
+        <span>横轴时间 t，右侧数值为当前值</span>
+      </div>
+    </section>
+  </main>
+
+  <section class="controls">
+    <div class="row">
+      <button class="preset-btn" data-preset="p">纯 P（无重力）</button>
+      <button class="preset-btn" data-preset="pd_over">PD 过冲（D 过小）</button>
+      <button class="preset-btn" data-preset="pd_crit">PD 临界（D 合适）</button>
+      <button class="preset-btn" data-preset="pd_heavy">PD 过阻尼（D 过大）</button>
+      <button class="preset-btn" data-preset="pdg">PD + 重力（稳态误差）</button>
+      <button class="preset-btn" data-preset="pidg">PID + 重力（消除稳态误差）</button>
+    </div>
+    <div class="row">
+      <div class="sliders">
+        <div class="slider-box">
+          <div class="head"><span class="name" style="color:#ff6b6b">P 增益 Kp</span><span class="val" id="vKp">−40</span></div>
+          <input id="slKp" type="range" min="0" max="100" step="1" value="40">
+        </div>
+        <div class="slider-box">
+          <div class="head"><span class="name" style="color:#5ea0ff">D 增益 Kd</span><span class="val" id="vKd">0</span></div>
+          <input id="slKd" type="range" min="0" max="60" step="0.5" value="0">
+        </div>
+        <div class="slider-box">
+          <div class="head"><span class="name" style="color:#2ecc71">I 增益 Ki</span><span class="val" id="vKi">0</span></div>
+          <input id="slKi" type="range" min="0" max="30" step="0.5" value="0">
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="sliders">
+        <div class="slider-box">
+          <div class="head"><span class="name">目标位置 x₀</span><span class="val" id="vTarget">0.0</span></div>
+          <input id="slTarget" type="range" min="-2" max="2" step="0.05" value="0">
+        </div>
+        <div class="slider-box">
+          <div class="head"><span class="name">初始位置 x(0)</span><span class="val" id="vInit">−1.8</span></div>
+          <input id="slInit" type="range" min="-2" max="2" step="0.05" value="-1.8">
+        </div>
+        <div class="toggles">
+          <label><input type="checkbox" id="chkGrav"> 模拟重力 g = 9.8 m/s²</label>
+        </div>
+      </div>
+    </div>
+<div class="row">
+      <button class="action run" id="btnRun">暂停</button>
+      <button class="action" id="btnReset">重置</button>
+      <button class="action" id="btnKick">扰动（往下踢一脚）</button>
+      <span class="note-hint" style="margin-left:6px">仿真速度</span>
+      <button class="preset-btn speed-btn" data-speed="0.25">0.25×</button>
+      <button class="preset-btn speed-btn" data-speed="0.5">0.5×</button>
+      <button class="preset-btn speed-btn active" data-speed="1">1×</button>
+      <button class="preset-btn speed-btn" data-speed="2">2×</button>
+      <span class="note-hint">滑杆输入的是"强度"正值；为指向目标、抑制误差，公式中统一取负号（Kp、Kd、Ki &lt; 0），含义与笔记一致。</span>
+    </div>
+  </section>
+
+  <section class="explain" id="explain"></section>
+
+  <footer class="bottom">配套笔记：PID/PID.md　·　jsrain 制作　·　离线单文件，双击即可打开</footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const world = $('world'), charts = $('charts');
+  const wctx = world.getContext('2d'), cctx = charts.getContext('2d');
+  const DPR = window.devicePixelRatio || 1;
+
+  const DT = 1 / 240;
+  const WINDOW_T = 8;
+  const MAXPTS = Math.ceil(WINDOW_T / DT) + 2;
+  const G = 9.8;
+  const IE_CLAMP = 10;
+
+  const state = {
+    x: -1.8, v: 0, ie: 0, t: 0, x0: 0,
+    Kp: -40, Kd: 0, Ki: 0,
+    gravity: false, running: true,
+    acc: 0, hist: []
+  };
+  let speed = 1;
+  let win = { lo: -3.2, hi: 3.2 };
+  let trail = [];
+
+  const els = {
+    slKp: $('slKp'), slKd: $('slKd'), slKi: $('slKi'),
+    vKp: $('vKp'), vKd: $('vKd'), vKi: $('vKi'),
+    slTarget: $('slTarget'), vTarget: $('vTarget'),
+    slInit: $('slInit'), vInit: $('vInit'),
+    chkGrav: $('chkGrav'),
+    btnRun: $('btnRun'), btnReset: $('btnReset'), btnKick: $('btnKick'),
+    roE: $('roE'), roV: $('roV'), roI: $('roI'), roA: $('roA'), uTerms: $('uTerms'),
+    formula: $('formula'), explain: $('explain')
+  };
+
+  const PANELS = [
+    { key: 'x', title: 'x(t) · 位置', unit: 'm', color: '#ffd166', lineX0: true },
+    { key: 'e', title: 'e(t) · 误差', unit: 'm', color: '#ff6b6b' },
+    { key: 'v', title: 'v(t) = de/dt · 速度', unit: 'm/s', color: '#5ea0ff' },
+    { key: 'a', title: 'a(t) · 加速度', unit: 'm/s²', color: '#2ecc71' }
+  ];
+  const C_X0 = '#4ecdc4';
+
+  const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+  const fmt = (v, d) => (v >= 0 ? ' ' : '') + Number(v).toFixed(d);
+  function niceStep(range){
+    const raw = range / 3.5;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const norm = raw / mag;
+    return (norm < 1.5 ? 1 : norm < 3.5 ? 2 : norm < 7.5 ? 5 : 10) * mag;
+  }
+
+  function syncFromUI(){
+    const km = v => v > 0 ? -v : 0;
+    state.Kp = km(+els.slKp.value);
+    state.Kd = km(+els.slKd.value);
+    state.Ki = km(+els.slKi.value);
+    state.gravity = els.chkGrav.checked;
+    els.vKp.textContent = state.Kp === 0 ? '0' : state.Kp.toFixed(1);
+    els.vKd.textContent = state.Kd === 0 ? '0' : state.Kd.toFixed(1);
+    els.vKi.textContent = state.Ki === 0 ? '0' : state.Ki.toFixed(1);
+  }
+  function syncTarget(){
+    state.x0 = +els.slTarget.value;
+    els.vTarget.textContent = state.x0.toFixed(2);
+  }
+  function resetState(full){
+    if (full) {
+      els.slTarget.value = 0;
+      els.slInit.value = -1.8;
+    }
+    state.x = +els.slInit.value;
+    els.vInit.textContent = state.x.toFixed(2);
+    syncTarget();
+    state.v = 0; state.ie = 0; state.t = 0; state.acc = 0;
+    state.hist = []; trail = [];
+    state.running = true;
+    els.btnRun.textContent = '暂停';
+  }
+
+  const PRESETS = {
+    p:        { Kp: 40, Kd: 0,  Ki: 0,  g: false, id: 'p' },
+    pd_over:  { Kp: 40, Kd: 3,  Ki: 0,  g: false, id: 'pd_over' },
+    pd_crit:  { Kp: 40, Kd: 12, Ki: 0,  g: false, id: 'pd_crit' },
+    pd_heavy: { Kp: 40, Kd: 30, Ki: 0,  g: false, id: 'pd_heavy' },
+    pdg:      { Kp: 40, Kd: 12, Ki: 0,  g: true,  id: 'pdg' },
+    pidg:     { Kp: 40, Kd: 12, Ki: 6,  g: true,  id: 'pidg' }
+  };
+  function applyPreset(name){
+    const p = PRESETS[name];
+    els.slKp.value = p.Kp; els.slKd.value = p.Kd; els.slKi.value = p.Ki;
+    els.chkGrav.checked = p.g;
+    syncFromUI();
+    resetState(true);
+    document.querySelectorAll('.preset-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.preset === name));
+  }
+
+  function controller(){
+    const e = state.x - state.x0;
+    const uP = state.Kp * e;
+    const uD = state.Kd * state.v;
+    const uI = state.Ki * state.ie;
+    const uNet = uP + uD + uI;
+    const a = state.gravity ? uNet - G : uNet;
+    return { e, uP, uD, uI };
+  }
+
+  function stepPhysics(){
+    const e = state.x - state.x0;
+    state.ie = clamp(state.ie + e * DT, -IE_CLAMP, IE_CLAMP);
+    const uP = state.Kp * e;
+    const uD = state.Kd * state.v;
+    const uI = state.Ki * state.ie;
+    const u = uP + uD + uI;
+    const a = state.gravity ? u - G : u;
+    state.v += a * DT;
+    state.x += state.v * DT;
+    state.t += DT;
+    state.hist.push({ t: state.t, x: state.x, e, v: state.v, a });
+    if (state.hist.length > MAXPTS) state.hist.shift();
+  }
+
+  function drawArrow(x, y0, len, color){
+    if (Math.abs(len) < 0.02) return;
+    const y1 = y0 - len;
+    const dir = Math.sign(len);
+    const head = Math.min(Math.abs(len) * 0.3, 9);
+    wctx.strokeStyle = color; wctx.fillStyle = color; wctx.lineWidth = 2;
+    wctx.beginPath(); wctx.moveTo(x, y0); wctx.lineTo(x, y1); wctx.stroke();
+    const bx = x - head * 0.6;
+    wctx.beginPath();
+    wctx.moveTo(bx, y1 + dir * head);
+    wctx.lineTo(x, y1);
+    wctx.lineTo(bx + head * 1.2, y1 + dir * head);
+    wctx.closePath(); wctx.fill();
+  }
+
+  function drawWorld(){
+    const W = world.clientWidth, H = world.clientHeight;
+    wctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    wctx.fillStyle = '#181b22'; wctx.fillRect(0, 0, W, H);
+
+    let lo = Math.min(state.x, state.x0, -3);
+    let hi = Math.max(state.x, state.x0, 3);
+    let span = hi - lo;
+    const MIN = 4.5;
+    if (span < MIN){ const c = (lo + hi) / 2; lo = c - MIN / 2; hi = c + MIN / 2; }
+    if (hi - lo > 22){ const c = (lo + hi) / 2; lo = c - 11; hi = c + 11; }
+    win.lo = lo; win.hi = hi;
+    const toY = v => ((hi - v) / (hi - lo)) * H;
+
+    const trackX = Math.round(W * 0.16) + 30;
+
+    const step = niceStep(hi - lo);
+    wctx.font = '11px Consolas, Menlo, monospace';
+    wctx.lineWidth = 1;
+    for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step){
+      const y = toY(v);
+      wctx.strokeStyle = 'rgba(255,255,255,0.16)';
+      wctx.beginPath(); wctx.moveTo(trackX - 7, y); wctx.lineTo(trackX + 7, y); wctx.stroke();
+      wctx.fillStyle = 'rgba(255,255,255,0.4)';
+      wctx.textAlign = 'right';
+      wctx.fillText((Math.round(v * 100) / 100).toFixed(1), trackX - 12, y + 4);
+    }
+    wctx.textAlign = 'left';
+    wctx.fillStyle = 'rgba(255,255,255,0.3)';
+    wctx.fillText('x (m)', trackX - 6, 14);
+
+    wctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    wctx.setLineDash([]);
+    wctx.beginPath(); wctx.moveTo(trackX, 0); wctx.lineTo(trackX, H); wctx.stroke();
+
+    const ty = toY(state.x0);
+    wctx.strokeStyle = C_X0;
+    wctx.lineWidth = 1.6;
+    wctx.setLineDash([7, 5]);
+    wctx.beginPath(); wctx.moveTo(0, ty); wctx.lineTo(W, ty); wctx.stroke();
+    wctx.setLineDash([]);
+    wctx.fillStyle = C_X0;
+    wctx.fillText('目标 x₀ = ' + state.x0.toFixed(2) + ' m', W - 8, ty - 6);
+    wctx.lineWidth = 1;
+
+    const by = Math.round(toY(state.x));
+    const R = clamp(H * 0.05, 12, 22);
+
+    trail.push({ x: trackX, y: by });
+    if (trail.length > 130) trail.shift();
+    for (let i = 0; i < trail.length; i++){
+      const a = (i / trail.length) * 0.16;
+      wctx.fillStyle = 'rgba(255,209,102,' + a.toFixed(3) + ')';
+      wctx.beginPath();
+      wctx.arc(trail[i].x, trail[i].y, R * (1 - i / trail.length), 0, Math.PI * 2);
+      wctx.fill();
+    }
+
+    wctx.shadowColor = 'rgba(255,209,102,0.6)';
+    wctx.shadowBlur = R;
+    wctx.fillStyle = '#ffd166';
+    wctx.beginPath(); wctx.arc(trackX, by, R, 0, Math.PI * 2); wctx.fill();
+    wctx.shadowBlur = 0;
+
+    const { e, uP, uD, uI } = controller();
+    const u = uP + uD + uI;
+    const aActual = state.gravity ? u - G : u;
+    const items = [
+      { label: 'P', val: uP, color: '#ff6b6b', off: -46 },
+      { label: 'I', val: uI, color: '#2ecc71', off: -14 },
+      { label: 'D', val: uD, color: '#5ea0ff', off: 14 }
+    ];
+    if (state.gravity) items.push({ label: 'g', val: -G, color: '#9aa4b0', off: 46 });
+
+    let maxA = 0.6;
+    items.forEach(it => { const av = Math.abs(it.val); if (av > maxA) maxA = av; });
+    const maxLen = Math.min(H * 0.16, 54);
+    const scale = maxLen / maxA;
+    if (state.gravity && Math.abs(aActual) > 0.02) items.push({ label: 'Σa', val: aActual, color: 'rgba(255,255,255,0.85)', off: 0, dashed: true });
+
+    items.forEach(it => {
+      const len = it.val * scale;
+      if (Math.abs(len) < 0.02) return;
+      const ax = trackX + it.off;
+      if (it.dashed){ wctx.setLineDash([4,3]); }
+      drawArrow(ax, by, len, it.color);
+      wctx.setLineDash([]);
+      wctx.fillStyle = it.color;
+      wctx.font = '10px Consolas, Menlo, monospace';
+      const lab = (it.val >= 0 ? '+' : '') + it.val.toFixed(1);
+      const tipY = by - len;
+      wctx.fillText(it.label + lab, ax + 3, tipY + (len > 0 ? 2 : 9));
+    });
+
+    wctx.font = '12px system-ui';
+    wctx.fillStyle = '#9aa4b0';
+    wctx.textAlign = 'left';
+    wctx.fillText('x(t) = ' + state.x.toFixed(2) + ' m', 8, H - 26);
+    wctx.fillText('t = ' + state.t.toFixed(2) + ' s', 8, H - 10);
+    wctx.textAlign = 'left';
+  }
+
+  function yMap(v, lo, hi, top, bot){ return bot - ((v - lo) / (hi - lo)) * (bot - top); }
+
+  function drawCharts(){
+    const W = charts.clientWidth, H = charts.clientHeight;
+    cctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    cctx.fillStyle = '#181b22'; cctx.fillRect(0, 0, W, H);
+
+    const hist = state.hist;
+    const n = hist.length;
+    const top = 8, titleH = 20, gap = 4, axisH = 20;
+    const available = H - top - axisH;
+    const panH = (available - (PANELS.length - 1) * gap) / PANELS.length;
+    const plotL = 46, plotR = W - 46;
+    const plotW = plotR - plotL;
+    const nowT = state.t;
+    const startT = nowT - WINDOW_T;
+
+    cctx.font = '10px Consolas, Menlo, monospace';
+    for (let i = 0; i <= WINDOW_T; i++){
+      const x = plotL + (1 - i / WINDOW_T) * plotW;
+      cctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      cctx.lineWidth = 1;
+      cctx.beginPath(); cctx.moveTo(x, top); cctx.lineTo(x, H - axisH); cctx.stroke();
+      if (i > 0 && i % 1 === 0){
+        cctx.fillStyle = 'rgba(255,255,255,0.32)';
+        cctx.fillText('−' + i + 's', x - 10, H - 6);
+      }
+    }
+    cctx.fillStyle = 'rgba(255,255,255,0.55)';
+    cctx.fillText('t=' + nowT.toFixed(1) + 's', plotL, H - 6);
+
+    for (let p = 0; p < PANELS.length; p++){
+      const pan = PANELS[p];
+      const py0 = top + p * (panH + gap);
+      const pTop = py0 + titleH;
+      const pBot = py0 + panH;
+
+      cctx.font = '12px system-ui';
+      cctx.fillStyle = '#9aa4b0';
+      cctx.fillText(pan.title, plotL, py0 + 15);
+
+      let lo = Infinity, hi = -Infinity;
+      const i0 = n > MAXPTS ? n - MAXPTS : 0;
+      for (let i = i0; i < n; i++){
+        const v = hist[i][pan.key];
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+      if (!isFinite(lo)) continue;
+      if (n === 0) continue;
+      lo = Math.min(lo, 0); hi = Math.max(hi, 0);
+      if (hi - lo < 1e-6) hi = lo + 1;
+      const pad = (hi - lo) * 0.12;
+      lo -= pad; hi += pad;
+
+      const tstep = niceStep((hi - lo));
+      cctx.font = '9px Consolas, Menlo, monospace';
+      cctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      cctx.fillStyle = 'rgba(255,255,255,0.32)';
+      cctx.lineWidth = 1;
+      for (let v = Math.ceil(lo / tstep) * tstep; v <= hi; v += tstep){
+        const y = yMap(v, lo, hi, pTop, pBot);
+        cctx.beginPath(); cctx.moveTo(plotL, y); cctx.lineTo(plotR, y); cctx.stroke();
+        cctx.fillText((Math.round(v * 100) / 100).toString(), 2, y + 3);
+      }
+      cctx.fillStyle = 'rgba(255,255,255,0.28)';
+      cctx.font = '10px system-ui';
+      cctx.fillText(pan.unit, plotR + 4, pTop + 4);
+
+      if (lo < 0 && hi > 0){
+        const yz = yMap(0, lo, hi, pTop, pBot);
+        cctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        cctx.setLineDash([4, 4]);
+        cctx.beginPath(); cctx.moveTo(plotL, yz); cctx.lineTo(plotR, yz); cctx.stroke();
+        cctx.setLineDash([]);
+      }
+      if (pan.lineX0){
+        const yx = yMap(state.x0, lo, hi, pTop, pBot);
+        cctx.strokeStyle = C_X0;
+        cctx.setLineDash([5, 4]);
+        cctx.beginPath(); cctx.moveTo(plotL, yx); cctx.lineTo(plotR, yx); cctx.stroke();
+        cctx.setLineDash([]);
+      }
+
+      cctx.strokeStyle = pan.color;
+      cctx.lineWidth = 1.7;
+      cctx.beginPath();
+      let started = false;
+      for (let i = i0; i < n; i++){
+        const rec = hist[i];
+        const x = plotL + (1 - (nowT - rec.t) / WINDOW_T) * plotW;
+        const y = yMap(rec[pan.key], lo, hi, pTop, pBot);
+        if (x < plotL || x > plotR) continue;
+        if (!started){ cctx.moveTo(x, y); started = true; }
+        else cctx.lineTo(x, y);
+      }
+      cctx.stroke();
+
+      if (n > 0){
+        const rec = hist[n - 1];
+        const x = plotL + (1 - (nowT - rec.t) / WINDOW_T) * plotW;
+        const y = yMap(rec[pan.key], lo, hi, pTop, pBot);
+        cctx.fillStyle = pan.color;
+        cctx.beginPath(); cctx.arc(x, y, 2.4, 0, Math.PI * 2); cctx.fill();
+        cctx.font = '11px Consolas, Menlo, monospace';
+        cctx.fillText(fmt(rec[pan.key], 2), plotR - 44, y - 4);
+      }
+    }
+  }
+
+  function updateReadouts(){
+    const { e, uP, uD, uI } = controller();
+    const u = uP + uD + uI;
+    const a = state.gravity ? u - G : u;
+    els.roE.textContent = e.toFixed(3);
+    els.roV.textContent = state.v.toFixed(3);
+    els.roI.textContent = state.ie.toFixed(3);
+    els.roA.textContent = a.toFixed(3);
+    els.uTerms.innerHTML =
+      '<span style="color:#ff6b6b">P ' + fmt(uP, 2) + '</span>　' +
+      '<span style="color:#2ecc71">I ' + fmt(uI, 2) + '</span>　' +
+      '<span style="color:#5ea0ff">D ' + fmt(uD, 2) + '</span>　' +
+      (state.gravity ? '<span style="color:#9aa4b0">g −9.80</span>　' : '') +
+      '<span style="color:#fff">Σ ' + (u.toFixed(2)) + '</span>';
+  }
+
+  function updateFormula(){
+    const g = state.gravity;
+    const html =
+      '当前：a = (<span style="color:#ff6b6b">' + state.Kp.toFixed(1) + '</span>)·e + ' +
+      '(<span style="color:#2ecc71">' + state.Ki.toFixed(1) + '</span>)·∫e dτ + ' +
+      '(<span style="color:#5ea0ff">' + state.Kd.toFixed(1) + '</span>)·de/dt　' +
+      (g ? '物理加速度 = a − <span style="color:#9aa4b0">9.8</span>（升力抵消部分重力）'
+         : '无重力，控制输出即物理加速度');
+    if (html !== els.formula._last) els.formula.innerHTML = els.formula._last = html;
+  }
+
+  function updateExplain(){
+    const hasP = Math.abs(state.Kp) > 0;
+    const hasD = Math.abs(state.Kd) > 0;
+    const hasI = Math.abs(state.Ki) > 0;
+    let text, full, ref;
+    if (!hasD && !hasI){
+      text = '当前只有比例项 <b>P</b>。加速度"始终"指向目标、大小与距离成正比 —— 小球走近时不会减速，冲到目标时速度最大，又继续冲向另一侧。<b>这是简谐运动，永不停息</b>，正如笔记第 1 节推导：x(t) = x₀ + A·cos(ωt+φ)。可拖动 Kp 观察振荡快慢。';
+      ref = '对应笔记：PID.md 第 1 节 · P 控制';
+    } else if (hasD && !hasI && !state.gravity){
+      text = '加了微分项 <b>D = Kd·de/dt</b>，它根据"当前速度"提前减速，相当于给系统加阻尼。请拖动 Kd：<b style="color:#ff6b6b">太小时仍会过冲</b>（惯性冲过头）；继续加大，衰减加快；<b style="color:#7aa2ff">过大时还没到达就被"刹停"</b>（过阻尼，速度过慢）。Kd≈临界阻尼时动能被一次吸收干净，最快最稳。';
+      ref = '对应笔记：PID.md 第 2 节 · PD 控制（注意 x/e/v/a 四条曲线）';
+    } else if (hasD && !hasI && state.gravity){
+      text = '现在存在 <b>重力 g</b>。稳定后速度为零，微分项不起作用，升力只剩比例项 Kp·e。要悬浮就必须升力=重力 → <b>Kp·e = g</b>，即 e = g/Kp ≠ 0。<b>这就是稳态误差，PD 无法消除</b>。可加大 Kp：稳态误差变小，但永远归不了零。';
+      ref = '对应笔记：PID.md 第 3 节（前半段）· 重力下的稳态误差';
+    } else if (hasI && state.gravity){
+      text = '加上积分项 <b>I = Ki·∫e dτ</b>：只要有误差残留，积分就不断累积，升力持续增长，直到积分项单独顶住重力（uI→g），误差最终<b>归零</b>。P 管现在、I 管过去、D 管未来 —— 一个公式集合了三个维度。注意：<b style="color:#ff6b6b">Ki 太大会积分过冲</b>，可以试着调大 Ki 观察。';
+      ref = '对应笔记：PID.md 第 3 节 · I 控制 + 完整 PID 公式';
+    } else {
+      text = '调节下方滑块组合出你想要的控制器，观察小球反应和四条曲线。';
+      ref = '';
+    }
+    full = '▶ ' + text + (ref ? '<div class="ref">' + ref + '</div>' : '');
+    if (full !== els.explain._last) els.explain.innerHTML = els.explain._last = full;
+  }
+
+  function render(){
+    drawWorld();
+    drawCharts();
+    updateReadouts();
+    updateFormula();
+    updateExplain();
+  }
+
+  let last = performance.now();
+  function loop(now){
+    requestAnimationFrame(loop);
+    let dt = now - last;
+    last = now;
+    if (dt > 250) dt = 250;
+    if (state.running){
+      state.acc += (dt / 1000) * speed;
+      let guard = 0;
+      while (state.acc >= DT && guard < 40){
+        stepPhysics();
+        state.acc -= DT;
+        guard++;
+      }
+    }
+    render();
+  }
+
+  function fit(){
+    world.width = world.clientWidth * DPR;
+    world.height = world.clientHeight * DPR;
+    charts.width = charts.clientWidth * DPR;
+    charts.height = charts.clientHeight * DPR;
+  }
+
+  let dragging = false;
+  world.addEventListener('pointerdown', ev => {
+    dragging = true;
+    const r = world.getBoundingClientRect();
+    const y = ev.clientY - r.top;
+    const v = win.hi - (y / world.clientHeight) * (win.hi - win.lo);
+    state.x0 = clamp(v, -2.5, 2.5);
+    els.slTarget.value = state.x0;
+    els.vTarget.textContent = state.x0.toFixed(2);
+  });
+  window.addEventListener('pointermove', ev => {
+    if (!dragging) return;
+    const r = world.getBoundingClientRect();
+    const y = ev.clientY - r.top;
+    const v = win.hi - (y / world.clientHeight) * (win.hi - win.lo);
+    state.x0 = clamp(v, -2.5, 2.5);
+    els.slTarget.value = state.x0;
+    els.vTarget.textContent = state.x0.toFixed(2);
+  });
+  window.addEventListener('pointerup', () => dragging = false);
+
+  els.slKp.addEventListener('input', syncFromUI);
+  els.slKd.addEventListener('input', syncFromUI);
+  els.slKi.addEventListener('input', syncFromUI);
+  els.chkGrav.addEventListener('change', syncFromUI);
+  els.slTarget.addEventListener('input', () => { els.vTarget.textContent = (+els.slTarget.value).toFixed(2); });
+  els.slTarget.addEventListener('change', syncTarget);
+  els.slInit.addEventListener('input', () => { els.vInit.textContent = (+els.slInit.value).toFixed(2); });
+
+  document.querySelectorAll('.preset-btn').forEach(b => b.addEventListener('click', () => applyPreset(b.dataset.preset)));
+
+  document.querySelectorAll('.speed-btn').forEach(b => b.addEventListener('click', () => {
+    speed = +b.dataset.speed;
+    document.querySelectorAll('.speed-btn').forEach(x => x.classList.toggle('active', x === b));
+  }));
+
+  els.btnRun.addEventListener('click', () => {
+    state.running = !state.running;
+    els.btnRun.textContent = state.running ? '暂停' : '继续';
+  });
+  els.btnReset.addEventListener('click', () => resetState(false));
+  els.btnKick.addEventListener('click', () => { state.v -= 5; });
+
+  window.addEventListener('keydown', ev => {
+    if (ev.code === 'Space'){ ev.preventDefault(); els.btnRun.click(); }
+  });
+  window.addEventListener('resize', fit);
+
+  syncFromUI();
+  syncTarget();
+  applyPreset('p');
+  fit();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
