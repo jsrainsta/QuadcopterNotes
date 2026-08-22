@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>互补滤波演示 · 陀螺仪 + 加速度计</title>
+<style>
+  :root{
+    --bg:#0b1018; --bg2:#0e1520; --card:#141d2b; --card2:#101823;
+    --border:#23303f; --border2:#2c3c4f; --text:#e6edf4; --muted:#8494a7; --muted2:#5c6b7d;
+    --accent:#4dabf7; --shadow:0 8px 28px rgba(0,0,0,.35);
+    --mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,Menlo,monospace;
+    --ctrue:#e9ecef; --cacc:#ffd43b; --cgyro:#69db7c; --cfuse:#74c0fc;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:system-ui,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:radial-gradient(1200px 600px at 20% -10%, rgba(77,171,247,.08), transparent 60%),
+               linear-gradient(180deg,var(--bg2),var(--bg));
+    color:var(--text); height:100vh; overflow:hidden;
+    display:flex; flex-direction:column;
+  }
+  header{flex:none;display:flex;align-items:center;gap:14px;padding:10px 18px;border-bottom:1px solid var(--border);background:rgba(11,16,24,.72);backdrop-filter:blur(8px);flex-wrap:wrap}
+  .brand{display:flex;flex-direction:column;min-width:200px}
+  .brand h1{font-size:17px;font-weight:650;display:flex;align-items:center;gap:8px}
+  .brand h1 .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+  .brand .sub{font-size:11px;color:var(--muted);margin-top:2px}
+  .hint{flex:1;min-width:240px;font-size:12px;color:var(--muted);line-height:1.6;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:6px 12px}
+  .hint b{font-weight:600}
+  .actions{display:flex;gap:8px}
+  button{font-family:inherit;font-size:12.5px;color:var(--text);background:var(--card);border:1px solid var(--border2);border-radius:9px;padding:7px 12px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);background:#1a2637}
+  button.primary{background:linear-gradient(180deg,#1d4ed8,#1e40af);border-color:#2563eb;font-weight:600}
+  main{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:minmax(320px,5fr) 5fr;gap:14px;padding:14px 18px}
+  .card{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .card-head{flex:none;display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;color:var(--muted)}
+  .card-head .tt{font-weight:600;color:var(--text);font-size:13.5px}
+  .scene-wrap{flex:1 1 auto;min-height:0;position:relative}
+  .scene-wrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .scene-foot{flex:none;border-top:1px solid var(--border);padding:9px 14px;display:flex;gap:8px;flex-wrap:wrap}
+  .chip{flex:1 1 auto;min-width:88px;background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:5px 9px;display:flex;flex-direction:column;gap:1px}
+  .chip .k{font-size:10.5px;color:var(--muted)}
+  .chip .v{font-family:var(--mono);font-size:13.5px;font-weight:600}
+  .chart{position:relative;background:var(--card2);flex:1 1 auto;min-height:0}
+  .chart canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .legend{position:absolute;right:10px;top:6px;z-index:2;font-size:11px;color:var(--muted);background:rgba(10,17,25,.6);padding:3px 8px;border-radius:6px;border:1px solid var(--border);display:flex;flex-direction:column;gap:2px;pointer-events:none}
+  .legend .row{display:flex;align-items:center;gap:5px}
+  .legend .sw{width:9px;height:9px;border-radius:50%}
+  footer{flex:none;border-top:1px solid var(--border);background:rgba(11,16,24,.6);padding:12px 18px 14px}
+  .panel-title{font-size:11px;color:var(--muted2);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px}
+  .modes{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px}
+  .modes button{padding:6px 14px}
+  .modes button.active{border-color:var(--accent);color:#cfe6ff;background:#17263a}
+  .sliders{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px 18px}
+  .slider{display:flex;flex-direction:column;gap:3px}
+  .slider-head{display:flex;align-items:center;gap:8px}
+  .slider-head label{font-size:12px;color:var(--muted);flex:none}
+  .slider-head .snum{width:70px;background:var(--card2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:12px;padding:3px 6px;text-align:right}
+  .slider-head .snum:focus{outline:none;border-color:var(--accent)}
+  .slider-head .unit{font-size:10.5px;color:var(--muted2);width:34px}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:22px;background:transparent;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:5px;border-radius:3px;background:#0a1119;border:1px solid var(--border2)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;margin-top:-6px;background:#fff;border:3px solid var(--accent);box-shadow:0 0 8px rgba(77,171,247,.6)}
+  input[type=range]::-moz-range-track{height:5px;border-radius:3px;background:#0a1119;border:1px solid var(--border2)}
+  input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#fff;border:3px solid var(--accent)}
+  input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px}
+  .toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  @media (max-width:900px){body{overflow:auto;height:auto}main{grid-template-columns:1fr;grid-template-rows:minmax(360px,45vh) minmax(400px,55vh)}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1><span class="dot"></span>互补滤波演示（1D）</h1>
+    <div class="sub">陀螺仪积分会飘 · 加速度计会抖 · 融合取长补短</div>
+  </div>
+  <div class="hint">
+    <b>板子</b> = 真实角度（白）；<b style="color:var(--cacc)">黄</b> = 加速度计（抖、会被干扰骗）；<b style="color:var(--cgyro)">绿</b> = 陀螺仪积分（滑但会飘）；<b style="color:var(--cfuse)">蓝</b> = 融合结果（应贴住板子）。
+    <br>试试把"陀螺仪零偏"调大看绿色怎么飘走，再调 Kp 看蓝色怎么把它拽回来。
+  </div>
+  <div class="actions">
+    <button id="playBtn" class="primary">⏸ 暂停</button>
+    <button id="resetBtn">↺ 重置</button>
+  </div>
+</header>
+
+<main>
+  <section class="card">
+    <div class="card-head"><span class="tt">场景</span><span style="margin-left:auto;font-size:11px">角度正 = 板子右端下沉</span></div>
+    <div class="scene-wrap"><canvas id="scene"></canvas></div>
+    <div class="scene-foot">
+      <div class="chip"><span class="k">真实角度</span><span class="v" id="rv-t" style="color:var(--ctrue)">0.0°</span></div>
+      <div class="chip"><span class="k">加速度计</span><span class="v" id="rv-a" style="color:var(--cacc)">0.0°</span></div>
+      <div class="chip"><span class="k">陀螺仪积分</span><span class="v" id="rv-g" style="color:var(--cgyro)">0.0°</span></div>
+      <div class="chip"><span class="k">融合结果</span><span class="v" id="rv-f" style="color:var(--cfuse)">0.0°</span></div>
+      <div class="chip"><span class="k">纠偏误差 e</span><span class="v" id="rv-e">0.0°</span></div>
+      <div class="chip"><span class="k">积分漂移</span><span class="v" id="rv-d">0.0°</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><span class="tt">曲线（最近 12 秒）</span></div>
+    <div class="chart">
+      <canvas id="chart"></canvas>
+      <div class="legend">
+        <div class="row"><span class="sw" style="background:var(--ctrue)"></span>真实</div>
+        <div class="row"><span class="sw" style="background:var(--cacc)"></span>加速度计</div>
+        <div class="row"><span class="sw" style="background:var(--cgyro)"></span>陀螺仪积分</div>
+        <div class="row"><span class="sw" style="background:var(--cfuse)"></span>融合</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="modes" id="modes">
+    <button class="active" data-mode="静止">静止</button>
+    <button data-mode="摆动">来回摆动</button>
+    <button data-mode="阶跃">突然歪 30°</button>
+    <button data-mode="手动">手动设角度</button>
+  </div>
+  <div class="sliders" id="sliders"></div>
+</footer>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ============ 状态 ============ */
+  const S = {
+    t:0, theta:0, omega:0,
+    gyroAngle:0, accelAngle:0, fused:0, eInt:0,
+    mode:'静止', manual:20,
+    Kp:1.5, Ki:0.2, bias:1.0, noise:3.0, disturb:0, speed:1,
+    running:true, sampleAcc:0,
+  };
+  const PHYS_DT = 1/240, SAMPLE_DT = 1/60, WINDOW = 12, MAXLEN = 60*24;
+  const hist = { t:[], a:[], g:[], f:[], r:[] };
+  const C = { '#ctrue':'#e9ecef', '#cacc':'#ffd43b', '#cgyro':'#69db7c', '#cfuse':'#74c0fc' };
+
+  const $ = id => document.getElementById(id);
+  const clamp = (v,a,b) => v<a?a:(v>b?b:v);
+  const gauss = (() => { let sp=null; return () => {
+    if(sp!==null){ const v=sp; sp=null; return v; }
+    let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random();
+    const m=Math.sqrt(-2*Math.log(u)); sp=m*Math.sin(2*Math.PI*v); return m*Math.cos(2*Math.PI*v);
+  }; })();
+
+  function surface(canvas){
+    let s = canvas._surf;
+    const r = canvas.getBoundingClientRect();
+    const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+    const dpr = window.devicePixelRatio || 1;
+    if(!s || s.w!==w || s.h!==h){
+      canvas.width = Math.round(r.width*dpr); canvas.height = Math.round(r.height*dpr);
+      s = canvas._surf = { ctx: canvas.getContext('2d'), w, h, dpr };
+    }
+    s.ctx.setTransform(dpr,0,0,dpr,0,0);
+    return s;
+  }
+
+  /* ============ 滑杆 ============ */
+  const PARAMS = [
+    {key:'Kp',      label:'Kp 拽回力度', min:0,   max:5,  step:0.05, def:1.5, unit:'',     dec:2},
+    {key:'Ki',      label:'Ki 吃持续偏差', min:0,  max:2,  step:0.01, def:0.2, unit:'',     dec:2},
+    {key:'bias',    label:'陀螺仪零偏',   min:0,   max:5,  step:0.1,  def:1.0, unit:'°/s',  dec:1},
+    {key:'noise',   label:'加速度计噪声', min:0,   max:12, step:0.5,  def:3.0, unit:'°',    dec:1},
+    {key:'disturb', label:'加速度计干扰', min:0,   max:25, step:0.5,  def:0,   unit:'°',    dec:1},
+    {key:'manual',  label:'手动角度',     min:-45, max:45, step:1,    def:20,  unit:'°',    dec:0},
+    {key:'speed',   label:'模拟速度',     min:0.25,max:3,  step:0.05, def:1,   unit:'×',    dec:2},
+  ];
+  const sliderEls = {};
+  const box = $('sliders');
+  for(const p of PARAMS){
+    const wrap = document.createElement('div');
+    wrap.className='slider';
+    wrap.innerHTML = `<div class="slider-head"><label>${p.label}</label><input class="snum" type="number" step="${p.step}" min="${p.min}" max="${p.max}" value="${p.def}"><span class="unit">${p.unit}</span></div><input class="srange" type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${p.def}">`;
+    const range = wrap.querySelector('.srange'), num = wrap.querySelector('.snum');
+    let lock=false;
+    range.addEventListener('input', ()=>{ if(lock)return; lock=true; num.value=(+range.value).toFixed(p.dec); lock=false; S[p.key]=+range.value; });
+    num.addEventListener('input', ()=>{ if(lock)return; lock=true; let v=+num.value; if(!isFinite(v))v=p.def; v=clamp(v,p.min,p.max); range.value=v; lock=false; S[p.key]=v; });
+    sliderEls[p.key]={range,num};
+    box.appendChild(wrap);
+  }
+  function syncSliders(){ for(const p of PARAMS){ const el=sliderEls[p.key]; el.range.value=S[p.key]; el.num.value=(+S[p.key]).toFixed(p.dec); } }
+  function setManualEnabled(on){ sliderEls.manual.range.disabled=!on; sliderEls.manual.num.disabled=!on; }
+
+  /* ============ 模式按钮 ============ */
+  const modesBox = $('modes');
+  modesBox.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    modesBox.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    S.mode = b.dataset.mode;
+    setManualEnabled(S.mode==='手动');
+    reset();
+  }));
+
+  /* ============ 仿真 ============ */
+  function trueTheta(t){
+    switch(S.mode){
+      case '摆动': return 30*Math.sin(2*Math.PI*0.4*t);
+      case '阶跃': return t>=0.6 ? 30 : 0;
+      case '手动': return S.manual;
+      default:    return 0;
+    }
+  }
+  function substep(dt){
+    const prev = S.theta;
+    S.theta = trueTheta(S.t + dt);
+    S.omega = (S.theta - prev)/dt;
+    const gyro  = S.omega + S.bias + gauss()*S.noise*0.3;
+    const accel = S.theta + S.disturb + gauss()*S.noise;
+    S.gyroAngle += gyro*dt;
+    S.accelAngle = accel;
+    const e = accel - S.fused;
+    S.eInt = clamp(S.eInt + e*dt, -80, 80);
+    S.fused += (gyro + S.Kp*e + S.Ki*S.eInt)*dt;
+    S.t += dt;
+  }
+  function record(){
+    const el = S.t;
+    hist.t.push(el); hist.r.push(S.theta); hist.a.push(S.accelAngle);
+    hist.g.push(S.gyroAngle); hist.f.push(S.fused);
+    if(hist.t.length>MAXLEN){ hist.t.shift(); hist.r.shift(); hist.a.shift(); hist.g.shift(); hist.f.shift(); }
+  }
+  function advance(real){
+    let sim = real*S.speed, guard=0;
+    while(sim>0 && guard++<4000){
+      const dt = Math.min(PHYS_DT, sim);
+      substep(dt); sim-=dt;
+      S.sampleAcc+=dt;
+      if(S.sampleAcc>=SAMPLE_DT){ S.sampleAcc-=SAMPLE_DT; record(); }
+    }
+  }
+  function reset(){
+    S.t=0; S.theta=trueTheta(0); S.omega=0; S.gyroAngle=S.theta; S.fused=S.theta;
+    S.accelAngle=S.theta; S.eInt=0; S.sampleAcc=0;
+    hist.t.length=0; hist.r.length=0; hist.a.length=0; hist.g.length=0; hist.f.length=0;
+    S.running=true; $('playBtn').textContent='⏸ 暂停';
+  }
+
+  /* ============ 场景绘制 ============ */
+  function needle(ctx, cx, cy, len, ang, color, label){
+    const rad = ang*Math.PI/180;
+    const x2 = cx + len*Math.cos(rad), y2 = cy + len*Math.sin(rad);
+    ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=2.5; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(x2,y2); ctx.stroke();
+    const a = rad + Math.PI/2, hs=7;
+    ctx.beginPath();
+    ctx.moveTo(x2,y2); ctx.lineTo(x2+hs*Math.cos(a)-hs*0.6*Math.cos(rad), y2+hs*Math.sin(a)-hs*0.6*Math.sin(rad));
+    ctx.lineTo(x2-hs*Math.cos(a)-hs*0.6*Math.cos(rad), y2-hs*Math.sin(a)-hs*0.6*Math.sin(rad));
+    ctx.closePath(); ctx.fill();
+    ctx.font='600 11px '+getComputedStyle(document.body).fontFamily;
+    ctx.textAlign='center';
+    ctx.fillText(label+' '+ang.toFixed(1)+'°', x2, y2 - 10);
+  }
+  function drawScene(){
+    const s = surface($('scene'));
+    const {ctx,w,h}=s;
+    ctx.clearRect(0,0,w,h);
+    const cx=w/2, cy=h*0.48, L=Math.min(w*0.38, h*0.30);
+
+    // 水平参考线
+    ctx.save();
+    ctx.setLineDash([6,6]);
+    ctx.strokeStyle='rgba(255,255,255,.14)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(24,cy); ctx.lineTo(w-24,cy); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle='#5c6b7d'; ctx.font='10.5px '+getComputedStyle(document.body).fontFamily; ctx.textAlign='left';
+    ctx.fillText('水平线', 26, cy-6);
+
+    // 板子（真实角度）
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(S.theta*Math.PI/180);
+    const grad=ctx.createLinearGradient(-L,0,L,0);
+    grad.addColorStop(0,'#4b5a6d'); grad.addColorStop(1,'#8ea4bd');
+    ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=10;
+    ctx.fillStyle=grad;
+    ctx.beginPath();
+    ctx.moveTo(-L,-8); ctx.lineTo(L,-8); ctx.lineTo(L,8); ctx.lineTo(-L,8);
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.fillStyle='#fff';
+    ctx.beginPath(); ctx.arc(0,0,5,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+
+    // 三条指针
+    needle(ctx, cx, cy, L*0.72, S.accelAngle, C['#cacc'], '加速度计');
+    needle(ctx, cx, cy, L*0.72, S.gyroAngle, C['#cgyro'], '陀螺仪');
+    needle(ctx, cx, cy, L*0.72, S.fused,     C['#cfuse'], '融合');
+
+    // 读数
+    $('rv-t').textContent=S.theta.toFixed(1)+'°';
+    $('rv-a').textContent=S.accelAngle.toFixed(1)+'°';
+    $('rv-g').textContent=S.gyroAngle.toFixed(1)+'°';
+    $('rv-f').textContent=S.fused.toFixed(1)+'°';
+    $('rv-e').textContent=(S.accelAngle-S.fused).toFixed(1)+'°';
+    $('rv-d').textContent=(S.gyroAngle-S.theta).toFixed(1)+'°';
+  }
+
+  /* ============ 曲线绘制 ============ */
+  function drawChart(){
+    const s = surface($('chart'));
+    const {ctx,w,h}=s;
+    ctx.clearRect(0,0,w,h);
+    const padL=46,padR=14,padT=12,padB=16;
+    const pw=w-padL-padR, ph=h-padT-padB;
+    if(pw<10||ph<10)return;
+    const winEnd=Math.max(S.t,1e-3), winStart=Math.max(0,winEnd-WINDOW), span=Math.max(winEnd-winStart,0.02);
+    const ymin=-58, ymax=58;
+    const X = t => padL + (t-winStart)/span*pw;
+    const Y = v => padT + (ymax-v)/(ymax-ymin)*ph;
+
+    ctx.font='9.5px '+getComputedStyle(document.body).fontFamily;
+    ctx.textAlign='right'; ctx.textBaseline='middle';
+    for(let g=0;g<=4;g++){
+      const val=ymax-(ymax-ymin)*g/4, gy=padT+ph*g/4;
+      ctx.strokeStyle = g===2?'rgba(255,255,255,.12)':'rgba(255,255,255,.05)';
+      ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(padL,gy); ctx.lineTo(w-padR,gy); ctx.stroke();
+      ctx.fillStyle='#5c6b7d';
+      ctx.fillText(val.toFixed(0)+'°', padL-5, gy);
+    }
+    ctx.textBaseline='alphabetic';
+
+    const data = [['r',C['#ctrue'],2.1,1],['a',C['#cacc'],1.5,0.9],['g',C['#cgyro'],1.5,0.9],['f',C['#cfuse'],2.1,1]];
+    for(const [key,color,lw,alpha] of data){
+      const arr = hist[key];
+      ctx.strokeStyle=color; ctx.globalAlpha=alpha; ctx.lineWidth=lw; ctx.lineJoin='round';
+      ctx.beginPath();
+      let started=false;
+      for(let i=0;i<hist.t.length;i++){
+        if(hist.t[i]<winStart-1e-6)continue;
+        if(hist.t[i]>winEnd+1e-6)break;
+        const sx=X(hist.t[i]), sy=Y(arr[i]);
+        if(!started){ctx.moveTo(sx,sy);started=true;}else ctx.lineTo(sx,sy);
+      }
+      ctx.stroke();
+      ctx.globalAlpha=1;
+    }
+    // 当前时刻竖线
+    ctx.strokeStyle='rgba(255,255,255,.18)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(w-padR,padT); ctx.lineTo(w-padR,h-padB); ctx.stroke();
+  }
+
+  /* ============ 主循环 ============ */
+  let lastNow = performance.now();
+  function frame(now){
+    let real = Math.min(0.05,(now-lastNow)/1000);
+    lastNow = now;
+    if(S.running) advance(real);
+    drawScene();
+    drawChart();
+    requestAnimationFrame(frame);
+  }
+
+  $('playBtn').addEventListener('click',()=>{ S.running=!S.running; $('playBtn').textContent=S.running?'⏸ 暂停':'▶ 播放'; });
+  $('resetBtn').addEventListener('click',reset);
+  window.addEventListener('keydown',e=>{ if(e.target&&e.target.tagName==='INPUT')return; if(e.code==='Space'){e.preventDefault();$('playBtn').click();} else if(e.key==='r'||e.key==='R'){reset();} });
+
+  reset(); syncSliders(); setManualEnabled(false);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

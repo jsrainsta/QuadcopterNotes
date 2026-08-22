@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>三维姿态解算演示 · Mahony 互补滤波</title>
+<style>
+  :root{
+    --bg:#0b1018; --bg2:#0e1520; --card:#141d2b; --card2:#101823;
+    --border:#23303f; --border2:#2c3c4f; --text:#e6edf4; --muted:#8494a7; --muted2:#5c6b7d;
+    --accent:#4dabf7; --shadow:0 8px 28px rgba(0,0,0,.35);
+    --mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:system-ui,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:radial-gradient(1200px 600px at 20% -10%, rgba(77,171,247,.08), transparent 60%),
+               linear-gradient(180deg,var(--bg2),var(--bg));
+    color:var(--text); height:100vh; overflow:hidden;
+    display:flex; flex-direction:column;
+  }
+  header{flex:none;display:flex;align-items:center;gap:14px;padding:10px 18px;border-bottom:1px solid var(--border);background:rgba(11,16,24,.72);backdrop-filter:blur(8px);flex-wrap:wrap}
+  .brand{display:flex;flex-direction:column;min-width:220px}
+  .brand h1{font-size:17px;font-weight:650;display:flex;align-items:center;gap:8px}
+  .brand h1 .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+  .brand .sub{font-size:11px;color:var(--muted);margin-top:2px}
+  .hint{flex:1;min-width:260px;font-size:12px;color:var(--muted);line-height:1.6;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:6px 12px}
+  .hint b{font-weight:600}
+  .actions{display:flex;gap:8px}
+  button{font-family:inherit;font-size:12.5px;color:var(--text);background:var(--card);border:1px solid var(--border2);border-radius:9px;padding:7px 12px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--accent);background:#1a2637}
+  button.primary{background:linear-gradient(180deg,#1d4ed8,#1e40af);border-color:#2563eb;font-weight:600}
+  main{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:minmax(320px,6fr) 4fr;gap:14px;padding:14px 18px}
+  .card{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .card-head{flex:none;display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;color:var(--muted)}
+  .card-head .tt{font-weight:600;color:var(--text);font-size:13.5px}
+  .scene-wrap{flex:1 1 auto;min-height:0;position:relative;cursor:grab}
+  .scene-wrap:active{cursor:grabbing}
+  .scene-wrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .readout{flex:none;border-top:1px solid var(--border);padding:9px 14px;display:flex;gap:8px;flex-wrap:wrap}
+  .chip{flex:1 1 auto;min-width:86px;background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:5px 9px;display:flex;flex-direction:column;gap:1px}
+  .chip .k{font-size:10.5px;color:var(--muted)}
+  .chip .v{font-family:var(--mono);font-size:13px;font-weight:600}
+  .chart{position:relative;background:var(--card2);flex:1 1 auto;min-height:0}
+  .chart canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .legend{position:absolute;right:10px;top:6px;z-index:2;font-size:11px;color:var(--muted);background:rgba(10,17,25,.6);padding:3px 8px;border-radius:6px;border:1px solid var(--border);display:flex;flex-direction:column;gap:2px;pointer-events:none}
+  .legend .row{display:flex;align-items:center;gap:5px}
+  .legend .sw{width:9px;height:9px;border-radius:50%}
+  footer{flex:none;border-top:1px solid var(--border);background:rgba(11,16,24,.6);padding:12px 18px 14px}
+  .panel-title{font-size:11px;color:var(--muted2);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px}
+  .modes{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+  .modes button{padding:6px 14px}
+  .modes button.active{border-color:var(--accent);color:#cfe6ff;background:#17263a}
+  .toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px}
+  .sliders{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px 18px}
+  .slider{display:flex;flex-direction:column;gap:3px}
+  .slider-head{display:flex;align-items:center;gap:8px}
+  .slider-head label{font-size:12px;color:var(--muted);flex:none}
+  .slider-head .snum{width:70px;background:var(--card2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:12px;padding:3px 6px;text-align:right}
+  .slider-head .snum:focus{outline:none;border-color:var(--accent)}
+  .slider-head .unit{font-size:10.5px;color:var(--muted2);width:34px}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:22px;background:transparent;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:5px;border-radius:3px;background:#0a1119;border:1px solid var(--border2)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;margin-top:-6px;background:#fff;border:3px solid var(--accent);box-shadow:0 0 8px rgba(77,171,247,.6)}
+  input[type=range]::-moz-range-track{height:5px;border-radius:3px;background:#0a1119;border:1px solid var(--border2)}
+  input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#fff;border:3px solid var(--accent)}
+  @media (max-width:900px){body{overflow:auto;height:auto}main{grid-template-columns:1fr;grid-template-rows:minmax(380px,55vh) minmax(360px,45vh)}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1><span class="dot"></span>三维姿态解算演示</h1>
+    <div class="sub">Mahony 互补滤波 · 真实 vs 解算实时对比</div>
+  </div>
+  <div class="hint">
+    <b>白色线框</b> = 真实姿态，<b>彩色方块</b> = 解算结果（贴住 = 成功）。
+    试试把"陀螺仪零偏"调大看解算滞后，再调 Kp 看它被拽回来；关掉"磁力计校正"看航向(yaw)慢慢飘走。
+  </div>
+  <div class="actions">
+    <button id="playBtn" class="primary">⏸ 暂停</button>
+    <button id="resetBtn">↺ 重置</button>
+  </div>
+</header>
+
+<main>
+  <section class="card">
+    <div class="card-head"><span class="tt">三维场景</span><span style="margin-left:auto;font-size:11px" id="dragHint">手动模式下按住拖拽旋转机体</span></div>
+    <div class="scene-wrap" id="sceneWrap"><canvas id="scene"></canvas></div>
+    <div class="readout">
+      <div class="chip"><span class="k">真实 roll</span><span class="v" id="rv-tr" style="color:#ff8787">0.0°</span></div>
+      <div class="chip"><span class="k">真实 pitch</span><span class="v" id="rv-tp" style="color:#69db7c">0.0°</span></div>
+      <div class="chip"><span class="k">真实 yaw</span><span class="v" id="rv-ty" style="color:#74c0fc">0.0°</span></div>
+      <div class="chip"><span class="k">解算 roll</span><span class="v" id="rv-er" style="color:#ff8787">0.0°</span></div>
+      <div class="chip"><span class="k">解算 pitch</span><span class="v" id="rv-ep" style="color:#69db7c">0.0°</span></div>
+      <div class="chip"><span class="k">解算 yaw</span><span class="v" id="rv-ey" style="color:#74c0fc">0.0°</span></div>
+      <div class="chip"><span class="k">最大误差</span><span class="v" id="rv-max">0.0°</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><span class="tt">解算误差（解算 − 真实，最近 10 秒）</span></div>
+    <div class="chart">
+      <canvas id="chart"></canvas>
+      <div class="legend">
+        <div class="row"><span class="sw" style="background:#ff8787"></span>roll</div>
+        <div class="row"><span class="sw" style="background:#69db7c"></span>pitch</div>
+        <div class="row"><span class="sw" style="background:#74c0fc"></span>yaw</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="modes" id="modes">
+    <button class="active" data-mode="自动">自动运动</button>
+    <button data-mode="手动">手动拖拽</button>
+    <span class="toggle"><input type="checkbox" id="magChk" checked>磁力计校正（固定航向）</span>
+  </div>
+  <div class="sliders" id="sliders"></div>
+</footer>
+
+<script>
+(() => {
+  'use strict';
+
+  const D2R = Math.PI/180, R2D = 180/Math.PI;
+  const clamp = (v,a,b) => v<a?a:(v>b?b:v);
+  const gauss = (() => { let sp=null; return () => {
+    if(sp!==null){ const v=sp; sp=null; return v; }
+    let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random();
+    const m=Math.sqrt(-2*Math.log(u)); sp=m*Math.sin(2*Math.PI*v); return m*Math.cos(2*Math.PI*v);
+  }; })();
+  const $ = id => document.getElementById(id);
+
+  /* ============ 四元数工具 ============ */
+  const qMul = (a,b) => [
+    a[0]*b[0]-a[1]*b[1]-a[2]*b[2]-a[3]*b[3],
+    a[0]*b[1]+a[1]*b[0]+a[2]*b[3]-a[3]*b[2],
+    a[0]*b[2]-a[1]*b[3]+a[2]*b[0]+a[3]*b[1],
+    a[0]*b[3]+a[1]*b[2]-a[2]*b[1]+a[3]*b[0],
+  ];
+  const qConj = q => [q[0],-q[1],-q[2],-q[3]];
+  const qNorm = q => { const n=Math.hypot(q[0],q[1],q[2],q[3]); return [q[0]/n,q[1]/n,q[2]/n,q[3]/n]; };
+  const qFromAxisAngle = (axis, ang) => {
+    const h=ang/2, s=Math.sin(h);
+    return qNorm([Math.cos(h), axis[0]*s, axis[1]*s, axis[2]*s]);
+  };
+  const qFromEuler = (r,p,y) => {
+    const cr=Math.cos(r/2),sr=Math.sin(r/2),cp=Math.cos(p/2),sp=Math.sin(p/2),cy=Math.cos(y/2),sy=Math.sin(y/2);
+    return [ cr*cp*cy+sr*sp*sy, sr*cp*cy-cr*sp*sy, cr*sp*cy+sr*cp*sy, cr*cp*sy-sr*sp*cy ];
+  };
+  const rotMat = q => { const w=q[0],x=q[1],y=q[2],z=q[3];
+    return [
+      [1-2*(y*y+z*z), 2*(x*y-w*z), 2*(x*z+w*y)],
+      [2*(x*y+w*z), 1-2*(x*x+z*z), 2*(y*z-w*x)],
+      [2*(x*z-w*y), 2*(y*z+w*x), 1-2*(x*x+y*y)],
+    ];
+  };
+  const qToEuler = q => {
+    const w=q[0],x=q[1],y=q[2],z=q[3];
+    return [
+      Math.asin(clamp(2*(w*y-x*z),-1,1)),
+      -Math.atan2(2*(w*x+y*z), 1-2*(x*x+y*y)),
+      Math.atan2(2*(w*z+x*y), 1-2*(y*y+z*z)),
+    ];
+  };
+  const qLog = q => {
+    const w=clamp(q[0],-1,1), ang=2*Math.acos(w), s=Math.sqrt(1-w*w);
+    if(s<1e-6) return [0,[1,0,0]];
+    return [ang, [q[1]/s,q[2]/s,q[3]/s]];
+  };
+  const mul = (M,v) => [
+    M[0][0]*v[0]+M[0][1]*v[1]+M[0][2]*v[2],
+    M[1][0]*v[0]+M[1][1]*v[1]+M[1][2]*v[2],
+    M[2][0]*v[0]+M[2][1]*v[1]+M[2][2]*v[2],
+  ];
+  const transpose = M => [
+    [M[0][0],M[1][0],M[2][0]],
+    [M[0][1],M[1][1],M[2][1]],
+    [M[0][2],M[1][2],M[2][2]],
+  ];
+
+  /* ============ Mahony 互补滤波（移植自学长 IMU.c） ============ */
+  const FIL = { ex:0, ey:0, ez:0 };
+  function mahonyStep(q, gx,gy,gz, ax,ay,az, mx,my,mz, useMag, halfT, Kp, Ki){
+    const q0=q[0],q1=q[1],q2=q[2],q3=q[3];
+    let norm = 1/Math.sqrt(ax*ax+ay*ay+az*az);
+    ax*=norm; ay*=norm; az*=norm;
+    // 预测"重力方向"在机体坐标里的分量（第③步）
+    const vx=2*(q1*q3-q0*q2), vy=2*(q0*q1+q2*q3), vz=q0*q0-q1*q1-q2*q2+q3*q3;
+    let ex,ey,ez;
+    if(useMag){
+      norm=1/Math.sqrt(mx*mx+my*my+mz*mz);
+      mx*=norm; my*=norm; mz*=norm;
+      const hx=2*mx*(0.5-q2*q2-q3*q3)+2*my*(q1*q2-q0*q3)+2*mz*(q1*q3+q0*q2);
+      const hy=2*mx*(q1*q2+q0*q3)+2*my*(0.5-q1*q1-q3*q3)+2*mz*(q2*q3-q0*q1);
+      const hz=2*mx*(q1*q3-q0*q2)+2*my*(q2*q3+q0*q1)+2*mz*(0.5-q1*q1-q2*q2);
+      const by=Math.sqrt(hx*hx+hy*hy), bz=hz;
+      const wx=2*by*(q1*q2+q0*q3)+2*bz*(q1*q3-q0*q2);
+      const wy=2*by*(0.5-q1*q1-q3*q3)+2*bz*(q0*q1+q2*q3);
+      const wz=2*by*(q2*q3-q0*q1)+2*bz*(0.5-q1*q1-q2*q2);
+      // 叉积误差（第④步）
+      ex=(ay*vz-az*vy)+(my*wz-mz*wy);
+      ey=(az*vx-ax*vz)+(mz*wx-mx*wz);
+      ez=(ax*vy-ay*vx)+(mx*wy-my*wx);
+    } else {
+      ex=ay*vz-az*vy; ey=az*vx-ax*vz; ez=ax*vy-ay*vx;
+    }
+    // 误差过 PI，修正陀螺仪（第⑤步）
+    FIL.ex+=ex*Ki*halfT; FIL.ey+=ey*Ki*halfT; FIL.ez+=ez*Ki*halfT;
+    gx=gx+Kp*ex+FIL.ex; gy=gy+Kp*ey+FIL.ey; gz=gz+Kp*ez+FIL.ez;
+    // 更新四元数（第⑥步）
+    const q0n=q0,q1n=q1,q2n=q2,q3n=q3;
+    q[0]=q0n+(-q1n*gx-q2n*gy-q3n*gz)*halfT;
+    q[1]=q1n+(q0n*gx+q2n*gz-q3n*gy)*halfT;
+    q[2]=q2n+(q0n*gy-q1n*gz+q3n*gx)*halfT;
+    q[3]=q3n+(q0n*gz+q1n*gy-q2n*gx)*halfT;
+    // 归一化（第⑦步）
+    const n=1/Math.sqrt(q[0]*q[0]+q[1]*q[1]+q[2]*q[2]+q[3]*q[3]);
+    q[0]*=n; q[1]*=n; q[2]*=n; q[3]*=n;
+  }
+
+  /* ============ 状态 ============ */
+  const S = {
+    t:0, mode:'自动', qTrue:[1,0,0,0], qEst:[1,0,0,0],
+    Kp:2.0, Ki:0.005, bias:2.0, noise:1.0, speed:1,
+    useMag:true, running:true,
+  };
+  const PHYS_DT = 1/240, SAMPLE_DT = 1/60, WINDOW=10, MAXLEN=60*20;
+  const hist = { t:[], r:[], p:[], y:[] };
+  const CUBE_V = [
+    [-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],
+    [-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1],
+  ];
+  const FACES = [
+    {v:[0,3,7,4], n:[-1,0,0]},
+    {v:[1,2,6,5], n:[1,0,0]},
+    {v:[0,1,5,4], n:[0,-1,0]},
+    {v:[3,7,6,2], n:[0,1,0]},
+    {v:[0,4,5,1], n:[0,0,-1]},
+    {v:[3,2,6,7], n:[0,0,1]},
+  ];
+  const FACE_COLORS = [
+    [224,49,49],[255,135,135],[47,158,68],[105,219,124],[25,113,194],[116,192,252],
+  ];
+  const EDGES = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+
+  function surface(canvas){
+    let s = canvas._surf;
+    const r = canvas.getBoundingClientRect();
+    const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+    const dpr = window.devicePixelRatio || 1;
+    if(!s || s.w!==w || s.h!==h){
+      canvas.width = Math.round(r.width*dpr); canvas.height = Math.round(r.height*dpr);
+      s = canvas._surf = { ctx: canvas.getContext('2d'), w, h, dpr };
+    }
+    s.ctx.setTransform(dpr,0,0,dpr,0,0);
+    return s;
+  }
+
+  /* ============ 滑杆 ============ */
+  const PARAMS = [
+    {key:'Kp',    label:'Kp 拽回力度', min:0,   max:3,   step:0.05, def:2.0, unit:'',  dec:2},
+    {key:'Ki',    label:'Ki 吃持续偏差', min:0, max:0.1, step:0.001,def:0.005,unit:'', dec:3},
+    {key:'bias',  label:'陀螺仪零偏',   min:0,   max:5,   step:0.1,  def:2.0, unit:'°/s',dec:1},
+    {key:'noise', label:'传感器噪声',   min:0,   max:5,   step:0.1,  def:1.0, unit:'',  dec:1},
+    {key:'speed', label:'模拟速度',     min:0.25,max:3,   step:0.05, def:1,   unit:'×', dec:2},
+  ];
+  const sliderEls = {};
+  const box = $('sliders');
+  for(const p of PARAMS){
+    const wrap = document.createElement('div');
+    wrap.className='slider';
+    wrap.innerHTML = `<div class="slider-head"><label>${p.label}</label><input class="snum" type="number" step="${p.step}" min="${p.min}" max="${p.max}" value="${p.def}"><span class="unit">${p.unit}</span></div><input class="srange" type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${p.def}">`;
+    const range = wrap.querySelector('.srange'), num = wrap.querySelector('.snum');
+    let lock=false;
+    range.addEventListener('input', ()=>{ if(lock)return; lock=true; num.value=(+range.value).toFixed(p.dec); lock=false; S[p.key]=+range.value; });
+    num.addEventListener('input', ()=>{ if(lock)return; lock=true; let v=+num.value; if(!isFinite(v))v=p.def; v=clamp(v,p.min,p.max); range.value=v; lock=false; S[p.key]=v; });
+    sliderEls[p.key]={range,num};
+    box.appendChild(wrap);
+  }
+  function syncSliders(){ for(const p of PARAMS){ const el=sliderEls[p.key]; el.range.value=S[p.key]; el.num.value=(+S[p.key]).toFixed(p.dec); } }
+
+  $('magChk').addEventListener('change', e => S.useMag = e.target.checked);
+  const modesBox = $('modes');
+  modesBox.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    modesBox.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    S.mode = b.dataset.mode;
+    $('dragHint').style.display = S.mode==='手动' ? '' : 'none';
+    reset();
+  }));
+
+  /* ============ 仿真 ============ */
+  function substep(dt){
+    S.t += dt;
+    const qPrev = S.qTrue.slice();
+    if(S.mode === '手动'){
+      // qTrue 由拖拽更新，这里只算角速度
+    } else {
+      const r = 22*D2R*Math.sin(2*Math.PI*0.27*S.t);
+      const p = 18*D2R*Math.sin(2*Math.PI*0.21*S.t + 0.9);
+      const y = 50*D2R*Math.sin(2*Math.PI*0.03*S.t);
+      S.qTrue = qFromEuler(r,p,y);
+    }
+    // 从四元数变化求真实角速度（机体坐标系：q_now = q_prev ⊗ q_body）
+    const qd = qMul(qConj(qPrev), S.qTrue);
+    const [ang, axis] = qLog(qd);
+    const w = [axis[0]*ang/Math.max(dt,1e-6), axis[1]*ang/Math.max(dt,1e-6), axis[2]*ang/Math.max(dt,1e-6)];
+
+    // 模拟传感器：重力/磁场方向转到机体坐标 + 零偏 + 噪声
+    // 世界系约定：z=上，y=北（学长代码的磁力计参考方向在 y 轴）
+    const Rt = transpose(rotMat(S.qTrue));
+    const acc = mul(Rt,[0,0,1]);
+    const mag = mul(Rt,[0,1,0]);
+    const gy = [
+      w[0] + S.bias*D2R*0.8 + gauss()*S.noise*0.25*D2R,
+      w[1] - S.bias*D2R*0.6 + gauss()*S.noise*0.25*D2R,
+      w[2] + S.bias*D2R*0.4 + gauss()*S.noise*0.25*D2R,
+    ];
+    const accN = [acc[0]+gauss()*S.noise*0.02, acc[1]+gauss()*S.noise*0.02, acc[2]+gauss()*S.noise*0.02];
+    const magN = [mag[0]+gauss()*S.noise*0.02, mag[1]+gauss()*S.noise*0.02, mag[2]+gauss()*S.noise*0.02];
+
+    mahonyStep(S.qEst, gy[0],gy[1],gy[2], accN[0],accN[1],accN[2], magN[0],magN[1],magN[2], S.useMag, dt/2, S.Kp, S.Ki);
+  }
+  function record(){
+    const el = S.t;
+    const te = qToEuler(S.qTrue), ee = qToEuler(S.qEst);
+    const d = (a,b)=>{ let x=(a-b)*R2D; while(x>180)x-=360; while(x<-180)x+=360; return x; };
+    hist.t.push(el);
+    hist.r.push(d(ee[0],te[0]));
+    hist.p.push(d(ee[1],te[1]));
+    hist.y.push(d(ee[2],te[2]));
+    if(hist.t.length>MAXLEN){ hist.t.shift(); hist.r.shift(); hist.p.shift(); hist.y.shift(); }
+  }
+  function advance(real){
+    let sim = real*S.speed, guard=0;
+    while(sim>0 && guard++<4000){
+      const dt = Math.min(PHYS_DT, sim);
+      substep(dt); sim-=dt;
+      S.sampleAcc = (S.sampleAcc||0) + dt;
+      if(S.sampleAcc>=SAMPLE_DT){ S.sampleAcc-=SAMPLE_DT; record(); }
+    }
+  }
+  function reset(){
+    S.t=0; S.qTrue=[1,0,0,0]; S.qEst=[1,0,0,0]; FIL.ex=0; FIL.ey=0; FIL.ez=0; S.sampleAcc=0;
+    hist.t.length=0; hist.r.length=0; hist.p.length=0; hist.y.length=0;
+    S.running=true; $('playBtn').textContent='⏸ 暂停';
+  }
+
+  /* ============ 3D 渲染 ============ */
+  const VIEW_AX = -28*D2R, VIEW_AY = 35*D2R;
+  function viewRot(p){
+    const cy=Math.cos(VIEW_AY), sy=Math.sin(VIEW_AY), cx=Math.cos(VIEW_AX), sx=Math.sin(VIEW_AX);
+    const y1 = p[1]*cx - p[2]*sx;
+    const z1 = p[1]*sx + p[2]*cx;
+    const x2 = p[0]*cy + z1*sy;
+    const z2 = -p[0]*sy + z1*cy;
+    return [x2, y1, z2];
+  }
+  function viewInv(p){
+    const cy=Math.cos(VIEW_AY), sy=Math.sin(VIEW_AY), cx=Math.cos(VIEW_AX), sx=Math.sin(VIEW_AX);
+    const x1 = p[0]*cy - p[2]*sy;
+    const z1 = p[0]*sy + p[2]*cy;
+    const y1 = p[1];
+    const y2 = y1*cx + z1*sx;
+    const z2 = -y1*sx + z1*cx;
+    return [x1, y2, z2];
+  }
+  function drawScene(){
+    const s = surface($('scene'));
+    const {ctx,w,h}=s;
+    ctx.clearRect(0,0,w,h);
+    const cx=w/2, cy=h*0.5, d=6.5, f=Math.min(w,h)*1.15;
+    const proj = v => { const vv=viewRot(v); return [cx + vv[0]*f/(vv[2]+d), cy - vv[1]*f/(vv[2]+d)]; };
+
+    // 地面网格（世界 z=0 平面）
+    ctx.strokeStyle='rgba(255,255,255,.10)'; ctx.lineWidth=1;
+    for(let i=-3;i<=3;i++){
+      let p1=proj([i,-3,0]), p2=proj([i,3,0]);
+      ctx.beginPath(); ctx.moveTo(p1[0],p1[1]); ctx.lineTo(p2[0],p2[1]); ctx.stroke();
+      p1=proj([-3,i,0]); p2=proj([3,i,0]);
+      ctx.beginPath(); ctx.moveTo(p1[0],p1[1]); ctx.lineTo(p2[0],p2[1]); ctx.stroke();
+    }
+    ctx.fillStyle='rgba(255,255,255,.35)'; ctx.font='10px '+getComputedStyle(document.body).fontFamily; ctx.textAlign='left';
+    const o=proj([0,0,0]);
+    ctx.fillText('地面（z=0）', o[0]+12, o[1]+14);
+
+    // 彩色方块（解算结果）
+    const Rq = rotMat(S.qEst), RqT = rotMat(S.qTrue);
+    const light = [0.35,0.7,0.62];
+    const ln = 1/Math.hypot(light[0],light[1],light[2]);
+    const faces = [];
+    for(let i=0;i<FACES.length;i++){
+      const fc = FACES[i];
+      const pts = fc.v.map(vi => mul(Rq, CUBE_V[vi]));
+      const wpts = pts.map(proj);
+      const nw = mul(Rq, fc.n);
+      const avgz = pts.reduce((a,p)=>a+p[2],0)/4;
+      faces.push({pts:wpts, color:FACE_COLORS[i], n:nw, avgz});
+    }
+    faces.sort((a,b)=>a.avgz-b.avgz);
+    for(const fc of faces){
+      const shade = 0.45 + 0.55*Math.max(0, (fc.n[0]*light[0]+fc.n[1]*light[1]+fc.n[2]*light[2])/ln);
+      const c = fc.color.map(v=>Math.round(clamp(v*shade,0,255)));
+      ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+      ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.lineWidth=1;
+      ctx.beginPath();
+      ctx.moveTo(fc.pts[0][0],fc.pts[0][1]);
+      for(let k=1;k<4;k++) ctx.lineTo(fc.pts[k][0],fc.pts[k][1]);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+
+    // 白色线框（真实姿态）
+    ctx.strokeStyle='rgba(255,255,255,.92)'; ctx.lineWidth=2.2;
+    ctx.beginPath();
+    for(const [a,b] of EDGES){
+      const p1=proj(mul(RqT,CUBE_V[a])), p2=proj(mul(RqT,CUBE_V[b]));
+      ctx.moveTo(p1[0],p1[1]); ctx.lineTo(p2[0],p2[1]);
+    }
+    ctx.stroke();
+
+    // 解算结果的机体轴
+    const axes = [[[1,0,0],'#ff6b6b'],[[0,1,0],'#69db7c'],[[0,0,1],'#4dabf7']];
+    for(const [a,c] of axes){
+      const p0=proj([0,0,0]), p1=proj(mul(Rq,[a[0]*1.6,a[1]*1.6,a[2]*1.6]));
+      ctx.strokeStyle=c; ctx.fillStyle=c; ctx.lineWidth=3; ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(p0[0],p0[1]); ctx.lineTo(p1[0],p1[1]); ctx.stroke();
+      const dx=p1[0]-p0[0], dy=p1[1]-p0[1], L=Math.hypot(dx,dy)||1, ux=dx/L, uy=dy/L;
+      ctx.beginPath();
+      ctx.moveTo(p1[0],p1[1]);
+      ctx.lineTo(p1[0]-ux*8-uy*4, p1[1]-uy*8+ux*4);
+      ctx.lineTo(p1[0]-ux*8+uy*4, p1[1]-uy*8-ux*4);
+      ctx.closePath(); ctx.fill();
+    }
+
+    // 读数
+    const te = qToEuler(S.qTrue), ee = qToEuler(S.qEst);
+    const deg = v => (v*R2D).toFixed(1)+'°';
+    $('rv-tr').textContent=deg(te[0]); $('rv-tp').textContent=deg(te[1]); $('rv-ty').textContent=deg(te[2]);
+    $('rv-er').textContent=deg(ee[0]); $('rv-ep').textContent=deg(ee[1]); $('rv-ey').textContent=deg(ee[2]);
+    const wd=(a,b)=>{ let x=Math.abs((a-b)*R2D); while(x>180)x=360-x; return x; };
+    const mx = Math.max(wd(ee[0],te[0]),wd(ee[1],te[1]),wd(ee[2],te[2]));
+    $('rv-max').textContent = mx.toFixed(1)+'°';
+  }
+
+  /* ============ 误差曲线 ============ */
+  function drawChart(){
+    const s = surface($('chart'));
+    const {ctx,w,h}=s;
+    ctx.clearRect(0,0,w,h);
+    const padL=46,padR=14,padT=12,padB=16;
+    const pw=w-padL-padR, ph=h-padT-padB;
+    if(pw<10||ph<10)return;
+    const winEnd=Math.max(S.t,1e-3), winStart=Math.max(0,winEnd-WINDOW), span=Math.max(winEnd-winStart,0.02);
+    const ymin=-20, ymax=20;
+    const X = t => padL+(t-winStart)/span*pw;
+    const Y = v => padT+(ymax-v)/(ymax-ymin)*ph;
+    ctx.font='9.5px '+getComputedStyle(document.body).fontFamily;
+    ctx.textAlign='right'; ctx.textBaseline='middle';
+    for(let g=0;g<=4;g++){
+      const val=ymax-(ymax-ymin)*g/4, gy=padT+ph*g/4;
+      ctx.strokeStyle=g===2?'rgba(255,255,255,.12)':'rgba(255,255,255,.05)';
+      ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(padL,gy); ctx.lineTo(w-padR,gy); ctx.stroke();
+      ctx.fillStyle='#5c6b7d'; ctx.fillText(val.toFixed(0)+'°', padL-5, gy);
+    }
+    ctx.textBaseline='alphabetic';
+    const series = [['r','#ff8787'],['p','#69db7c'],['y','#74c0fc']];
+    for(const [key,color] of series){
+      const arr=hist[key];
+      ctx.strokeStyle=color; ctx.lineWidth=1.8; ctx.lineJoin='round';
+      ctx.beginPath();
+      let started=false;
+      for(let i=0;i<hist.t.length;i++){
+        if(hist.t[i]<winStart-1e-6)continue;
+        if(hist.t[i]>winEnd+1e-6)break;
+        const sx=X(hist.t[i]), sy=Y(arr[i]);
+        if(!started){ctx.moveTo(sx,sy);started=true;}else ctx.lineTo(sx,sy);
+      }
+      ctx.stroke();
+    }
+    ctx.strokeStyle='rgba(255,255,255,.18)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(w-padR,padT); ctx.lineTo(w-padR,h-padB); ctx.stroke();
+  }
+
+  /* ============ 拖拽 ============ */
+  const canvas = $('scene');
+  let dragging=false, px=0, py=0;
+  canvas.addEventListener('pointerdown', e=>{ dragging=true; px=e.offsetX; py=e.offsetY; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    const dx=e.offsetX-px, dy=e.offsetY-py; px=e.offsetX; py=e.offsetY;
+    if(S.mode!=='手动') return;
+    const k=0.008;
+    const rx=viewInv([1,0,0]), ry=viewInv([0,1,0]);
+    S.qTrue = qNorm(qMul(qFromAxisAngle(ry, -dx*k), qMul(qFromAxisAngle(rx, dy*k), S.qTrue)));
+  });
+  canvas.addEventListener('pointerup', ()=>{ dragging=false; });
+
+  /* ============ 主循环 ============ */
+  let lastNow = performance.now();
+  function frame(now){
+    let real = Math.min(0.05,(now-lastNow)/1000);
+    lastNow = now;
+    if(S.running) advance(real);
+    drawScene();
+    drawChart();
+    requestAnimationFrame(frame);
+  }
+
+  $('playBtn').addEventListener('click',()=>{ S.running=!S.running; $('playBtn').textContent=S.running?'⏸ 暂停':'▶ 播放'; });
+  $('resetBtn').addEventListener('click',reset);
+  window.addEventListener('keydown',e=>{ if(e.target&&e.target.tagName==='INPUT')return; if(e.code==='Space'){e.preventDefault();$('playBtn').click();} else if(e.key==='r'||e.key==='R'){reset();} });
+
+  reset(); syncSliders();
+  $('dragHint').style.display='none';
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
