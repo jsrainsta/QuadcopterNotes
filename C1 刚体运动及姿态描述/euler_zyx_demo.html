@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>世界系 vs 机体系 · ZYX 姿态</title>
+  <style>
+    :root {
+      --bg: #f4f1ea;
+      --paper: #fffcf7;
+      --ink: #1c1917;
+      --muted: #78716c;
+      --line: #e7e0d6;
+      --earth: #1d4ed8;
+      --body: #0f766e;
+      --yaw: #0f766e;
+      --pitch: #b45309;
+      --roll: #7c3aed;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(900px 420px at 8% -12%, #e4ecf8 0%, transparent 52%),
+        radial-gradient(700px 360px at 100% 0%, #e7f3ee 0%, transparent 46%),
+        var(--bg);
+      color: var(--ink);
+    }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 26px 20px 48px; }
+    h1 { font-size: 26px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.02em; }
+    .sub { color: var(--muted); margin: 0 0 18px; line-height: 1.65; max-width: 860px; }
+    .formula {
+      display: inline-block;
+      background: #1c1917;
+      color: #fafaf9;
+      padding: 5px 11px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin: 4px 6px 0 0;
+    }
+    .ranges {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .card {5
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px 16px;
+      box-shadow: 0 10px 30px rgba(28, 25, 23, 0.05);
+    }
+    .mini h2 {
+      margin: 0 0 4px;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .mini .val { font-size: 18px; font-weight: 700; margin: 0 0 4px; }
+    .mini p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .yaw .val { color: var(--yaw); }
+    .pitch .val { color: var(--pitch); }
+    .roll .val { color: var(--roll); }
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .gimbal-box { margin-bottom: 14px; }
+    .gimbal-box header b { font-size: 15px; }
+    .gimbal-note {
+      padding: 0 14px 12px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .view {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .view.earth { border-color: #bfdbfe; }
+    .view.body { border-color: #99f6e4; }
+    .view header {
+      padding: 12px 14px 8px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .view header b { display: block; font-size: 15px; }
+    .view header span { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; line-height: 1.45; }
+    .tag {
+      flex: none;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: white;
+    }
+    .earth .tag { background: var(--earth); }
+    .body .tag { background: var(--body); }
+    canvas { display: block; width: 100%; height: auto; }
+    .bottom {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 14px;
+    }
+    .row { margin: 0 0 16px; }
+    .row label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .num { font-variant-numeric: tabular-nums; }
+    input[type=range] { width: 100%; }
+    .yaw-ctrl { color: var(--yaw); }
+    .pitch-ctrl { color: var(--pitch); }
+    .roll-ctrl { color: var(--roll); }
+    .hint {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.65;
+      background: #faf6ef;
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin: 0 0 12px;
+    }
+    .warn {
+      display: none;
+      background: #fff7ed;
+      color: #9a3412;
+      border: 1px solid #fed7aa;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+    .warn.on { display: block; }
+    button {
+      border: 0;
+      background: var(--ink);
+      color: white;
+      border-radius: 12px;
+      padding: 11px 14px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    #reset { width: 100%; }
+    .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+    .btns button { background: #44403c; font-size: 13px; padding: 9px 8px; }
+    .btns button.lock { background: #9a3412; }
+    .combo {
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      background: #1c1917;
+      color: #fafaf9;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      line-height: 1.55;
+    }
+    .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 10px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+    .bridge {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 0 0 14px;
+    }
+    .bridge .card { flex: 1; min-width: 240px; }
+    .bridge b { color: var(--ink); }
+    @media (max-width: 900px) {
+      .ranges, .compare, .bottom { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>世界系 vs 机体系</h1>
+    <p class="sub">
+      同一组欧拉角、同一个姿态，只是观察者不同。左边站在地面上看飞机；右边坐在飞机上看世界。
+      转向看起来相反是正常的：你左转，窗外的世界就右转。
+      <br />
+      <span class="formula">世界系：p<sub>e</sub> = R p<sub>b</sub></span>
+      <span class="formula">机体系：p<sub>b</sub> = R<sup>T</sup> p<sub>e</sub></span>
+    </p>
+
+    <div class="ranges">
+      <div class="card mini yaw">
+        <h2>偏航 ψ · 绕 Z</h2>
+        <p class="val">−180° ~ +180°</p>
+        <p>机头左右转。俯视图最清楚。</p>
+      </div>
+      <div class="card mini pitch">
+        <h2>俯仰 θ · 绕 Y</h2>
+        <p class="val">−90° ~ +90°</p>
+        <p>抬头为正。±90° 万向锁。</p>
+      </div>
+      <div class="card mini roll">
+        <h2>横滚 φ · 绕 X</h2>
+        <p class="val">−180° ~ +180°</p>
+        <p>绕机头滚。</p>
+      </div>
+    </div>
+
+    <div class="bridge">
+      <div class="card mini">
+        <h2>上面两图是什么</h2>
+        <p>只画<strong>最终姿态</strong>（世界轴 vs 机体轴），<b>不画三环云台</b>。所以你看不到“套在一起”。</p>
+      </div>
+      <div class="card mini">
+        <h2>嵌套在哪里</h2>
+        <p>在公式里：\(R=R_z(\psi)R_y(\theta)R_x(\varphi)\)。三个角<strong>按顺序连乘</strong>，数学上就是三层嵌套。下面第三幅图画的才是云台环。</p>
+      </div>
+    </div>
+
+    <div class="compare">
+      <div class="view earth">
+        <header>
+          <div>
+            <b>世界系（地球固定）</b>
+            <span>你站在地面：Xe Ye Ze 不动，看机头 Xb 往哪指。</span>
+          </div>
+          <span class="tag">E 固定</span>
+        </header>
+        <canvas id="earth" width="560" height="400"></canvas>
+      </div>
+      <div class="view body">
+        <header>
+          <div>
+            <b>机体系（飞机固定）</b>
+            <span>你坐在驾驶舱：Xb Yb Zb 不动，看地平线和世界轴怎么歪。</span>
+          </div>
+          <span class="tag">B 固定</span>
+        </header>
+        <canvas id="body" width="560" height="400"></canvas>
+      </div>
+    </div>
+
+    <div class="view gimbal-box">
+      <header>
+        <div>
+          <b>嵌套关系在这里：三环云台（欧拉角的机械比喻）</b>
+          <span>外环=偏航 · 中环=俯仰 · 内环=横滚。中环翻到 90° 时，外环轴和内环轴重合 → 万向锁。</span>
+        </div>
+        <span class="tag" style="background:#9a3412">嵌套</span>
+      </header>
+      <canvas id="gimbal" width="1120" height="360"></canvas>
+      <p class="gimbal-note" id="gimbalNote">
+        飞机上没有真的装三个铁环，但只要你用「偏航→俯仰→横滚」三个数描述姿态，就等于在用这套嵌套参数。会不会万向锁，看的是这种写法，不是图上有没有画铁环。
+      </p>
+    </div>
+
+    <div class="bottom">
+      <div class="card">
+        <div class="row yaw-ctrl">
+          <label>偏航 ψ <span class="num" id="yv">0°</span></label>
+          <input id="yaw" type="range" min="-180" max="180" value="0" />
+        </div>
+        <div class="row pitch-ctrl">
+          <label>俯仰 θ <span class="num" id="pv">0°</span></label>
+          <input id="pitch" type="range" min="-90" max="90" value="0" />
+        </div>
+        <div class="row roll-ctrl">
+          <label>横滚 φ <span class="num" id="rv">0°</span></label>
+          <input id="roll" type="range" min="-180" max="180" value="0" />
+        </div>
+        <div id="warn" class="warn">俯仰靠近 ±90°：偏航轴和滚转轴快重合了。左图里金色加粗的两根轴就是它们。</div>
+        <div class="combo" id="combo">先点「进入万向锁」，再分别点下面两个 +30°，看飞机是否一样。</div>
+        <div class="btns">
+          <button type="button" class="lock" id="enterLock">进入万向锁（俯仰=90°）</button>
+          <button type="button" id="yaw30">锁住后：偏航 +30°</button>
+          <button type="button" id="rollm30">锁住后：横滚 −30°</button>
+          <button type="button" id="normal30">对比：俯仰=0，偏航+30°</button>
+        </div>
+        <p class="hint">
+          万向锁不是飞机卡死转不动。是欧拉角这种「三个角依次转」的写法，在俯仰=±90° 时丢掉一个自由度：两个旋钮变成绕同一根轴。
+        </p>
+        <button type="button" id="reset">复位到 0°</button>
+        <div class="legend">
+          <span><i class="dot" style="background:#0d9488"></i>X 前</span>
+          <span><i class="dot" style="background:#e11d48"></i>Y 右</span>
+          <span><i class="dot" style="background:#2563eb"></i>Z 上</span>
+          <span>实线 = 机体轴　虚线 = 世界轴</span>
+        </div>
+      </div>
+      <div class="card">
+        <h2 style="margin:0 0 8px;font-size:14px;">万向锁是什么</h2>
+        <p class="hint" style="margin:0">
+          把姿态拆成三步：先绕 Z 偏航，再绕 Y 俯仰，再绕 X 横滚。中间那一步把机头转到竖直时，<b>原来的偏航轴和最后的横滚轴重合</b>。<br /><br />
+          于是三个数只剩下两个独立信息。ZYX 下俯仰 θ=90° 时，姿态矩阵只依赖 <b>ψ − φ</b>，ψ 加一点和 φ 减一点是同一姿态。<br /><br />
+          飞机在空间里照样能继续转；坏的是「用三个欧拉角当旋钮」这种参数化。所以后面要用旋转矩阵 / 四元数 / 轴角。
+        </p>
+      </div>
+    </div>
+  </div>
+
+<script>
+function Rx(a){const c=Math.cos(a),s=Math.sin(a);return [[1,0,0],[0,c,-s],[0,s,c]];}
+function Ry(a){const c=Math.cos(a),s=Math.sin(a);return [[c,0,s],[0,1,0],[-s,0,c]];}
+function Rz(a){const c=Math.cos(a),s=Math.sin(a);return [[c,-s,0],[s,c,0],[0,0,1]];}
+function mul(A,B){
+  const C=[[0,0,0],[0,0,0],[0,0,0]];
+  for(let i=0;i<3;i++) for(let j=0;j<3;j++)
+    C[i][j]=A[i][0]*B[0][j]+A[i][1]*B[1][j]+A[i][2]*B[2][j];
+  return C;
+}
+function mv(M,v){
+  return [
+    M[0][0]*v[0]+M[0][1]*v[1]+M[0][2]*v[2],
+    M[1][0]*v[0]+M[1][1]*v[1]+M[1][2]*v[2],
+    M[2][0]*v[0]+M[2][1]*v[1]+M[2][2]*v[2]
+  ];
+}
+function T(M){
+  return [[M[0][0],M[1][0],M[2][0]],[M[0][1],M[1][1],M[2][1]],[M[0][2],M[1][2],M[2][2]]];
+}
+function I3(){ return [[1,0,0],[0,1,0],[0,0,1]]; }
+
+const planePts = [
+  [1.05, 0, 0],
+  [-0.55, 0.72, 0],
+  [-0.28, 0, 0],
+  [-0.55, -0.72, 0]
+];
+
+function projectIso(p){
+  const x=p[0], y=p[1], z=p[2];
+  return [(x - y) * 0.866, z + (x + y) * 0.5];
+}
+
+function fit(ctx, pts2, pad){
+  const w=ctx.canvas.width, h=ctx.canvas.height;
+  let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+  pts2.forEach(p=>{
+    minX=Math.min(minX,p[0]); maxX=Math.max(maxX,p[0]);
+    minY=Math.min(minY,p[1]); maxY=Math.max(maxY,p[1]);
+  });
+  const s = Math.min((w-2*pad)/Math.max(1e-6,maxX-minX), (h-2*pad)/Math.max(1e-6,maxY-minY));
+  const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
+  return p => [w/2 + (p[0]-cx)*s, h/2 - (p[1]-cy)*s];
+}
+
+function samplesFor(R){
+  const pts = [];
+  for (let i=-2;i<=2;i++){
+    pts.push(projectIso([i,-2,0]), projectIso([i,2,0]), projectIso([-2,i,0]), projectIso([2,i,0]));
+  }
+  [[1.4,0,0],[0,1.4,0],[0,0,1.4]].forEach(v=>{
+    pts.push(projectIso(v));
+    pts.push(projectIso(mv(R,v)));
+  });
+  planePts.forEach(p=>{
+    pts.push(projectIso(p));
+    pts.push(projectIso(mv(R,p)));
+  });
+  return pts;
+}
+
+function clear(ctx){ ctx.fillStyle="#fffcf7"; ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height); }
+
+function grid(ctx, map, Rgrid){
+  ctx.strokeStyle="#efe8dc";
+  ctx.lineWidth=1;
+  for(let i=-2;i<=2;i++){
+    const a=map(projectIso(mv(Rgrid,[i,-2,0])));
+    const b=map(projectIso(mv(Rgrid,[i, 2,0])));
+    const c=map(projectIso(mv(Rgrid,[-2,i,0])));
+    const d=map(projectIso(mv(Rgrid,[ 2,i,0])));
+    ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(c[0],c[1]); ctx.lineTo(d[0],d[1]); ctx.stroke();
+  }
+}
+
+function arrow(ctx, a, b, color, label, dashed){
+  ctx.beginPath();
+  ctx.moveTo(a[0], a[1]);
+  ctx.lineTo(b[0], b[1]);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = dashed ? 2.2 : 3.4;
+  ctx.lineCap = "round";
+  ctx.setLineDash(dashed ? [6, 5] : []);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const ang = Math.atan2(b[1]-a[1], b[0]-a[0]);
+  ctx.beginPath();
+  ctx.moveTo(b[0], b[1]);
+  ctx.lineTo(b[0]-9*Math.cos(ang-0.4), b[1]-9*Math.sin(ang-0.4));
+  ctx.lineTo(b[0]-9*Math.cos(ang+0.4), b[1]-9*Math.sin(ang+0.4));
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.font = "12px Segoe UI, Microsoft YaHei, sans-serif";
+  ctx.fillText(label, b[0]+5, b[1]-3);
+}
+
+function axes(ctx, map, R, labels, dashed){
+  const o = map(projectIso([0,0,0]));
+  const cols = ["#0d9488", "#e11d48", "#2563eb"];
+  const tips = [[1.35,0,0],[0,1.35,0],[0,0,1.35]];
+  tips.forEach((t,i)=> arrow(ctx, o, map(projectIso(mv(R,t))), cols[i], labels[i], dashed));
+}
+
+function plane(ctx, map, R, fill){
+  const w = planePts.map(p => map(projectIso(mv(R,p))));
+  ctx.beginPath();
+  ctx.moveTo(w[0][0], w[0][1]);
+  ctx.lineTo(w[1][0], w[1][1]);
+  ctx.lineTo(w[2][0], w[2][1]);
+  ctx.lineTo(w[3][0], w[3][1]);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.strokeStyle = "#44403c";
+  ctx.lineWidth = 1.3;
+  ctx.stroke();
+}
+
+function glowAxis(ctx, map, dir, color, label){
+  const o = map(projectIso([0,0,0]));
+  const b = map(projectIso([dir[0]*1.55, dir[1]*1.55, dir[2]*1.55]));
+  ctx.beginPath();
+  ctx.moveTo(o[0], o[1]);
+  ctx.lineTo(b[0], b[1]);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 8;
+  ctx.globalAlpha = 0.35;
+  ctx.lineCap = "round";
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  arrow(ctx, o, b, color, label, false);
+}
+
+function drawPair(R, pitchDeg){
+  const map = fit(document.getElementById("earth").getContext("2d"), samplesFor(R), 40);
+  const Rt = T(R);
+  const locked = Math.abs(pitchDeg) >= 80;
+
+  const ce = document.getElementById("earth").getContext("2d");
+  clear(ce);
+  grid(ce, map, I3());
+  plane(ce, map, R, "rgba(29,78,216,0.88)");
+  axes(ce, map, I3(), ["Xe","Ye","Ze"], true);
+  axes(ce, map, R, ["Xb","Yb","Zb"], false);
+  if (locked) {
+    glowAxis(ce, map, [0,0,1], "#ca8a04", "偏航轴 Ze");
+    glowAxis(ce, map, mv(R,[1,0,0]), "#ea580c", "滚转轴 Xb");
+    ce.fillStyle = "#9a3412";
+    ce.font = "13px Segoe UI, Microsoft YaHei, sans-serif";
+    ce.fillText("这两根轴快重合 = 万向锁", 16, 24);
+  }
+
+  const cb = document.getElementById("body").getContext("2d");
+  clear(cb);
+  grid(cb, map, I3());
+  plane(cb, map, I3(), "rgba(15,118,110,0.88)");
+  axes(cb, map, Rt, ["Xe","Ye","Ze"], true);
+  axes(cb, map, I3(), ["Xb","Yb","Zb"], false);
+}
+
+/** 三环云台：外=偏航(绕世界Z)，中=俯仰(绕已偏航后的Y)，内=横滚(绕再转后的X) */
+function drawGimbal(yaw, pitch, roll){
+  const ctx = document.getElementById("gimbal").getContext("2d");
+  const w = ctx.canvas.width, h = ctx.canvas.height;
+  ctx.fillStyle = "#fffcf7";
+  ctx.fillRect(0, 0, w, h);
+
+  const toRad = d => d * Math.PI / 180;
+  const y = toRad(yaw), p = toRad(pitch), r = toRad(roll);
+  const locked = Math.abs(pitch) >= 80;
+
+  // 两帧对比：左=当前角；右=俯仰强制90°示意锁定
+  function scene(cx, cy, yawA, pitchA, rollA, title, sub){
+    const Ryaw = Rz(yawA), Rpitch = mul(Ryaw, Ry(pitchA)), Rall = mul(Rpitch, Rx(rollA));
+    const scale = 78;
+    const proj = v => {
+      const X = (v[0] - v[1]) * 0.866;
+      const Y = v[2] + (v[0] + v[1]) * 0.5;
+      return [cx + X * scale, cy - Y * scale];
+    };
+
+    ctx.fillStyle = "#1c1917";
+    ctx.font = "bold 14px Segoe UI, Microsoft YaHei, sans-serif";
+    ctx.fillText(title, cx - 150, cy - 140);
+    ctx.fillStyle = "#78716c";
+    ctx.font = "12px Segoe UI, Microsoft YaHei, sans-serif";
+    ctx.fillText(sub, cx - 150, cy - 120);
+
+    function ring(Rm, radius, color, axisHint){
+      ctx.beginPath();
+      const N = 64;
+      for (let i = 0; i <= N; i++){
+        const a = i / N * Math.PI * 2;
+        // 环在“局部 XY 平面”，法向为局部 Z；用 Rm 把局部点变到世界
+        const local = [radius * Math.cos(a), radius * Math.sin(a), 0];
+        const world = mv(Rm, local);
+        const q = proj(world);
+        if (i === 0) ctx.moveTo(q[0], q[1]); else ctx.lineTo(q[0], q[1]);
+      }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 4;
+      ctx.globalAlpha = 0.9;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      // 转轴
+      const tip = proj(mv(Rm, [0, 0, radius * 0.85]));
+      const o = proj([0,0,0]);
+      ctx.beginPath();
+      ctx.moveTo(o[0], o[1]);
+      ctx.lineTo(tip[0], tip[1]);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = color;
+      ctx.font = "12px Segoe UI, Microsoft YaHei, sans-serif";
+      ctx.fillText(axisHint, tip[0] + 4, tip[1]);
+    }
+
+    // 外环：绕世界 Z，环在 XY，法向 Z —— 用单位阵挂外环
+    ring(I3(), 1.55, "#0f766e", "外环轴 Z·偏航");
+    // 中环：先偏航后，环法向 = 已转的 Y
+    // 环画在局部 XY、法向 Z；要让法向变成“偏航后的 Y”，取旋转把 Z→Y：绕 X -90° 再乘 Ryaw
+    const RmidFrame = mul(Ryaw, Rx(-Math.PI/2));
+    ring(RmidFrame, 1.15, "#b45309", "中环轴 Y·俯仰");
+    // 内环：法向 = 偏航+俯仰后的 X
+    // 把局部 Z 转到 body X：绕 Y +90° 再乘 Rpitch
+    const RinnerFrame = mul(Rpitch, Ry(Math.PI/2));
+    ring(RinnerFrame, 0.78, "#7c3aed", "内环轴 X·横滚");
+
+    // 中心小飞机（最终姿态）
+    const tip = proj(mv(Rall, [0.7,0,0]));
+    const left = proj(mv(Rall, [-0.35,0.4,0]));
+    const right = proj(mv(Rall, [-0.35,-0.4,0]));
+    ctx.beginPath();
+    ctx.moveTo(tip[0], tip[1]);
+    ctx.lineTo(left[0], left[1]);
+    ctx.lineTo(right[0], right[1]);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(28,25,23,0.85)";
+    ctx.fill();
+  }
+
+  scene(w * 0.28, h * 0.55, y, p, r,
+    "当前滑条 → 三环跟着转",
+    locked ? "中环已接近 90°：外环轴 ≈ 内环轴（锁住）" : "三根转轴还互相错开，三个角都独立");
+
+  scene(w * 0.72, h * 0.55, y, Math.PI/2, r,
+    "对照：强行俯仰=90°",
+    "中环立起来后，青绿外环轴和紫色内环轴重合");
+
+  document.getElementById("gimbalNote").innerHTML = locked
+    ? "现在已经接近万向锁：嵌套的中环翻到竖直，外环和内环变成绕<strong>同一根轴</strong>转。上面左右姿态图里两根金色轴重合，说的是同一件事。"
+    : "上面左右两图<strong>故意不画铁环</strong>，只画姿态结果；嵌套在「先偏航再俯仰再横滚」的顺序里。没有铁环也会万向锁——因为欧拉角本身就是这套嵌套参数。";
+}
+
+function render(){
+  const yaw = +document.getElementById("yaw").value;
+  const pitch = +document.getElementById("pitch").value;
+  const roll = +document.getElementById("roll").value;
+  document.getElementById("yv").textContent = yaw + "°";
+  document.getElementById("pv").textContent = pitch + "°";
+  document.getElementById("rv").textContent = roll + "°";
+  const locked = Math.abs(pitch) >= 80;
+  document.getElementById("warn").classList.toggle("on", locked);
+  const combo = yaw - Math.sign(pitch || 1) * roll;
+  document.getElementById("combo").innerHTML = locked
+    ? `俯仰 ≈ ±90° 时，姿态几乎只看 <b>ψ − φ = ${yaw - roll}°</b>。所以「偏航 +30°」和「横滚 −30°」会得到同一架飞机。`
+    : `现在三个角都独立。ψ=${yaw}°，θ=${pitch}°，φ=${roll}°。把俯仰拉到 90° 后，偏航和横滚会抢同一根轴。`;
+  const R = mul(mul(Rz(yaw*Math.PI/180), Ry(pitch*Math.PI/180)), Rx(roll*Math.PI/180));
+  drawPair(R, pitch);
+  drawGimbal(yaw, pitch, roll);
+}
+
+function setAngles(y, p, r){
+  yaw.value = y; pitch.value = p; roll.value = r;
+  render();
+}
+
+["yaw","pitch","roll"].forEach(id => document.getElementById(id).addEventListener("input", render));
+document.getElementById("reset").onclick = () => setAngles(0, 0, 0);
+document.getElementById("enterLock").onclick = () => setAngles(0, 90, 0);
+document.getElementById("yaw30").onclick = () => setAngles(30, 90, 0);
+document.getElementById("rollm30").onclick = () => setAngles(0, 90, -30);
+document.getElementById("normal30").onclick = () => setAngles(30, 0, 0);
+render();
+</script>
+</body>
+</html>

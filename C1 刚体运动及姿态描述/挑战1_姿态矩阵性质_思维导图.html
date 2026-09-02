@@ -1,0 +1,1383 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>挑战点1 · 刚体姿态讲解流程图</title>
+  <style>
+    :root {
+      --ink: #1e293b;
+      --muted: #64748b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(900px 420px at 0% 0%, #dbeafe, transparent 55%),
+        radial-gradient(800px 400px at 100% 0%, #dcfce7, transparent 50%),
+        radial-gradient(700px 380px at 50% 100%, #fce7f3, transparent 45%),
+        #f8fafc;
+    }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 18px 64px; }
+    h1 { text-align: center; margin: 0 0 4px; font-size: 28px; }
+    .sub { text-align: center; color: var(--muted); margin: 0 0 22px; font-size: 14px; }
+
+    .flow { display: flex; flex-direction: column; align-items: center; }
+    .arrow {
+      color: #94a3b8; font-size: 22px; font-weight: 800;
+      padding: 8px 0 4px; display: flex; flex-direction: column; align-items: center;
+    }
+    .arrow small { font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 2px; }
+
+    .sec {
+      width: 100%;
+      border-radius: 20px;
+      padding: 18px 18px 16px;
+      margin: 4px 0;
+      border: 2px solid transparent;
+      box-shadow: 0 10px 28px rgba(30,41,59,.08);
+    }
+    .sec h2 {
+      margin: 0 0 12px; font-size: 18px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .badge {
+      width: 28px; height: 28px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 13px; font-weight: 800; flex: none;
+    }
+    .sec p, .sec li { font-size: 14px; line-height: 1.6; color: #334155; margin: 0; }
+    .sec ul { margin: 8px 0 0; padding-left: 18px; }
+    .grid { display: grid; gap: 12px; }
+    .grid-2 { grid-template-columns: 1fr 1fr; }
+    .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+    @media (max-width: 800px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: rgba(255,255,255,.78);
+      border-radius: 14px;
+      padding: 12px;
+      border: 1px solid rgba(0,0,0,.05);
+    }
+    .card h3 { margin: 0 0 8px; font-size: 15px; }
+    .f {
+      display: inline-block; background: #fff; border: 1px solid #e2e8f0;
+      border-radius: 8px; padding: 2px 8px; margin: 2px 2px 0 0;
+      font-family: "Cambria Math", "Times New Roman", serif; font-size: 13px;
+    }
+    .speak {
+      margin-top: 10px; padding: 10px 12px; border-radius: 12px;
+      background: rgba(255,255,255,.7); border-left: 4px solid #22c55e;
+      color: #166534; font-size: 13px;
+    }
+    .tip {
+      margin-top: 10px; padding: 10px 12px; border-radius: 12px;
+      background: rgba(255,255,255,.7); border-left: 4px solid #f59e0b;
+      color: #92400e; font-size: 13px;
+    }
+
+    .s1 { background: linear-gradient(145deg,#e0f2fe,#bae6fd); border-color:#38bdf8; }
+    .s2 { background: linear-gradient(145deg,#dcfce7,#bbf7d0); border-color:#4ade80; }
+    .s3 { background: linear-gradient(145deg,#ede9fe,#ddd6fe); border-color:#a78bfa; }
+    .s4 { background: linear-gradient(145deg,#fce7f3,#fbcfe8); border-color:#f472b6; }
+    .b1 { background:#0ea5e9; } .b2 { background:#22c55e; }
+    .b3 { background:#8b5cf6; } .b4 { background:#ec4899; }
+
+    canvas {
+      width: 100%; height: auto; display: block;
+      background: #fff; border-radius: 12px;
+      border: 1px solid #e2e8f0;
+    }
+    .view3d {
+      width: 100%; height: 280px; border-radius: 12px;
+      overflow: hidden; background: #f8fafc;
+      border: 1px solid #e2e8f0; position: relative;
+    }
+    .view3d canvas { display: block; width: 100% !important; height: 100% !important; }
+    .view3d.sm { height: 240px; }
+    .view-label {
+      position: absolute; top: 8px; left: 10px; z-index: 2;
+      font-size: 12px; font-weight: 700; padding: 4px 8px;
+      border-radius: 8px; background: rgba(255,255,255,.85);
+      color: #334155; pointer-events: none;
+    }
+    .mode-btns button.on.yaw { background: #2563eb; }
+    .mode-btns button.on.pitch { background: #e11d48; }
+    .mode-btns button.on.roll { background: #0d9488; }
+    .euler-cap {
+      margin: 6px 0 0; font-size: 13px; color: #475569; text-align: center; line-height: 1.5;
+    }
+    .euler-cap b { display: block; font-size: 14px; color: #0f172a; }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    button {
+      border: 0; border-radius: 10px; padding: 8px 12px;
+      background: #1e293b; color: #fff; font-size: 13px; cursor: pointer;
+    }
+    button.alt { background: #64748b; }
+    button:hover { opacity: .92; }
+    label.slider {
+      display: flex; justify-content: space-between; gap: 10px;
+      font-size: 13px; font-weight: 600; margin: 8px 0 4px;
+    }
+    input[type=range] { width: 100%; }
+    .step-bar {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;
+      font-size: 13px; font-weight: 600;
+    }
+    .step-bar span {
+      padding: 6px 10px; border-radius: 999px;
+      background: rgba(255,255,255,.65); color: #64748b;
+    }
+    .step-bar span.on { background: #8b5cf6; color: #fff; }
+    .step-bar span.done { background: #c4b5fd; color: #4c1d95; }
+    .status {
+      margin-top: 8px; padding: 10px 12px; border-radius: 12px;
+      background: rgba(255,255,255,.75); font-size: 13px; line-height: 1.55;
+      color: #334155; min-height: 44px;
+    }
+    .status b { color: #7c3aed; }
+    .end {
+      background: linear-gradient(145deg,#fef9c3,#fde047);
+      border: 2px solid #eab308; border-radius: 20px;
+      padding: 16px; text-align: center; width: 100%;
+      box-shadow: 0 10px 28px rgba(30,41,59,.08);
+    }
+
+    /* Part 2 嵌入式欧拉角交互演示 */
+    .euler-interactive {
+      display: grid;
+      grid-template-columns: 1fr 200px;
+      gap: 12px;
+      margin-top: 10px;
+    }
+    @media (max-width: 800px) { .euler-interactive { grid-template-columns: 1fr; } }
+    #viewEulerInteractive {
+      height: 420px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #eef3f8;
+      border: 1px solid #cbd5e1;
+      position: relative;
+    }
+    #viewEulerInteractive > canvas#mainEulerCanvas {
+      display: block; width: 100% !important; height: 100% !important;
+    }
+    .euler-axis-box {
+      position: absolute; top: 8px; right: 8px; z-index: 3;
+      width: 120px;
+      background: rgba(255,255,255,.95);
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      pointer-events: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,.06);
+      overflow: hidden;
+    }
+    .euler-axis-box .title {
+      font-size: 10px; font-weight: 700; color: #64748b;
+      text-align: center; padding: 5px 0 2px;
+    }
+    .euler-axis-box canvas#gizmoCanvasEuler {
+      display: block;
+      width: 120px !important;
+      height: 80px !important;
+    }
+    .euler-axis-box .labels { font-size: 9px; padding: 2px 6px 5px; line-height: 1.45; }
+    .euler-axis-box .labels span { display: block; }
+    .euler-hint {
+      position: absolute; bottom: 8px; left: 10px; z-index: 2;
+      font-size: 11px; color: #475569;
+      background: rgba(255,255,255,.85); padding: 5px 8px; border-radius: 8px;
+      pointer-events: none;
+    }
+    .euler-panel {
+      background: rgba(255,255,255,.85);
+      border-radius: 12px; padding: 12px;
+      border: 1px solid #e2e8f0;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .euler-panel h4 { margin: 0 0 4px; font-size: 14px; }
+    .euler-panel p { margin: 0; font-size: 12px; color: #64748b; }
+    button.euler-btn { background: #e2e8f0; color: #334155; font-size: 12px; padding: 9px 10px; border-radius: 10px; }
+    button.euler-btn.active { color: #fff; }
+    button#btnEulerYaw.active { background: #2563eb; }
+    button#btnEulerPitch.active { background: #e11d48; }
+    button#btnEulerRoll.active { background: #0d9488; }
+    button.euler-play { background: #1e293b; color: #fff; }
+    button.euler-view { background: #475569; color: #fff; font-size: 12px; padding: 8px; }
+    button.euler-reset { background: #64748b; color: #fff; }
+    .euler-status {
+      margin-top: 4px; padding: 8px; border-radius: 8px;
+      background: #f1f5f9; font-size: 12px; line-height: 1.5; flex: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>刚体姿态：从质点到万向锁</h1>
+    <p class="sub">挑战点1 讲解流程图 · 带动画 · 从上往下讲</p>
+
+    <div class="flow">
+
+      <!-- ========== PART 1 ========== -->
+      <section class="sec s1">
+        <h2><span class="badge b1">1</span>刚体 vs 质点：多出来的是「旋转」</h2>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>左边 · 质点（三维）</h3>
+            <div id="viewPoint" class="view3d"><span class="view-label">只有平移 · 无朝向</span></div>
+            <p style="margin-top:8px">在空间里移动，但没有「机头朝哪」——形状永远一样。</p>
+          </div>
+          <div class="card">
+            <h3>右边 · 刚体 / 飞机（三维）</h3>
+            <div id="viewRigid" class="view3d"><span class="view-label">平移 + 旋转 · 有姿态</span></div>
+            <p style="margin-top:8px">走<strong>同一条轨迹</strong>，但还会翻滚偏转；彩色小轴 = 机体 X/Y/Z。</p>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button type="button" id="play1">播放对比动画</button>
+          <button type="button" class="alt" id="pause1">暂停</button>
+        </div>
+        <div class="speak">口播：质点只关心「在哪」；刚体还要关心「朝哪」。我们课设先只控转动，所以后面全在谈姿态。</div>
+      </section>
+
+      <div class="arrow">▼<small>旋转必须相对某个参考系</small></div>
+
+      <!-- ========== PART 2 ========== -->
+      <section class="sec s2">
+        <h2><span class="badge b2">2</span>参考坐标系 · 左右手 · 三个基本角</h2>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>右手系（本课采用）</h3>
+            <canvas id="cRight" width="460" height="280"></canvas>
+            <p style="margin-top:8px">拇指 → X，食指 → Y，中指 → Z。正转：拇指指轴正方向，四指弯曲方向。</p>
+          </div>
+          <div class="card">
+            <h3>左手系（对照，课不用）</h3>
+            <canvas id="cLeft" width="460" height="280"></canvas>
+            <p style="margin-top:8px">用左手比，Z 方向会反过来。同一套角号，坐标系约定不同结果不同，所以必须先规定。</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px; border:2px solid #8b5cf6">
+          <h3>⭐ 交互三维演示（推荐讲课用）</h3>
+          <p style="margin:0;font-size:14px;color:#475569">
+            鼠标拖动旋转视角 · 点按钮切换偏航/俯仰/横滚 · 默认机头朝你、翼水平
+          </p>
+          <div class="euler-interactive">
+            <div id="viewEulerInteractive">
+              <div class="euler-axis-box">
+                <div class="title">世界坐标系</div>
+                <canvas id="gizmoCanvasEuler" width="120" height="80"></canvas>
+                <div class="labels">
+                  <span style="color:#0d9488">x · 机头方向</span>
+                  <span style="color:#e11d48">y · 右翼方向</span>
+                  <span style="color:#2563eb">z · 竖直向上</span>
+                </div>
+              </div>
+              <div class="euler-hint">左键拖动 · 滚轮缩放 · 右键平移</div>
+            </div>
+            <div class="euler-panel">
+              <h4>选择动作</h4>
+              <p>粉色 = 初始水平（翼水平）</p>
+              <button type="button" class="euler-btn" id="btnEulerYaw">偏航 ψ · 绕 z</button>
+              <button type="button" class="euler-btn" id="btnEulerPitch">俯仰 θ · 绕 y</button>
+              <button type="button" class="euler-btn" id="btnEulerRoll">横滚 φ · 绕 x</button>
+              <button type="button" class="euler-btn euler-play" id="btnEulerPlay">▶ 自动往复播放</button>
+              <button type="button" class="euler-btn euler-view" id="btnEulerFront">↩ 回到正面视角</button>
+              <button type="button" class="euler-btn euler-reset" id="btnEulerReset">复位（翼水平）</button>
+              <label class="slider">当前角度 <span id="eulerAngVal">0°</span></label>
+              <input id="eulerAngSlider" type="range" min="-55" max="55" value="0" />
+              <div class="euler-status" id="eulerStatus">
+                复位后：机头朝你、两翼水平。点按钮看单一动作。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h3>三个角分别怎么动？（小飞机 + 参考姿态）</h3>
+          <div class="grid grid-3">
+            <div>
+              <div id="viewRoll" class="view3d sm"><span class="view-label" style="color:#0d9488">横滚 φ · 绕 x</span></div>
+              <p class="euler-cap"><b>横滚 Roll φ</b>绕机头轴，两翼一上一下</p>
+            </div>
+            <div>
+              <div id="viewPitch" class="view3d sm"><span class="view-label" style="color:#e11d48">俯仰 θ · 绕 y</span></div>
+              <p class="euler-cap"><b>俯仰 Pitch θ</b>绕右翼轴，机头抬起或低下</p>
+            </div>
+            <div>
+              <div id="viewYaw" class="view3d sm"><span class="view-label" style="color:#2563eb">偏航 ψ · 绕 z</span></div>
+              <p class="euler-cap"><b>偏航 Yaw ψ</b>绕竖直轴，机头左右摆</p>
+            </div>
+          </div>
+          <div class="tip" style="margin-top:10px">
+            横滚：正面机头朝你、翼水平；俯仰：侧面看抬头低头；偏航：俯视看机头左右摆。粉色 = 初始水平对照。
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h3>手动拖滑条 · 三个角叠加对照（二维）</h3>
+          <canvas id="cAxes" width="980" height="300"></canvas>
+          <div class="grid grid-3" style="margin-top:10px">
+            <div>
+              <label class="slider">偏航 Yaw ψ（绕 Z）<span id="yv">45°</span></label>
+              <input id="yaw" type="range" min="-180" max="180" value="45" />
+              <p>机头左右转</p>
+            </div>
+            <div>
+              <label class="slider">俯仰 Pitch θ（绕 Y）<span id="pv">20°</span></label>
+              <input id="pitch" type="range" min="-90" max="90" value="20" />
+              <p>抬头 / 低头</p>
+            </div>
+            <div>
+              <label class="slider">横滚 Roll φ（绕 X）<span id="rv">25°</span></label>
+              <input id="roll" type="range" min="-180" max="180" value="25" />
+              <p>绕机头滚</p>
+            </div>
+          </div>
+          <div class="tip">顺序（本课）：先偏航 → 再俯仰 → 再横滚（ZYX）。三个角的取值：ψ、φ 约 ±180°；θ 约 ±90°。</div>
+        </div>
+      </section>
+
+      <div class="arrow">▼<small>现实里要定两套系：地球系 & 机体系</small></div>
+
+      <!-- ========== PART 3 ========== -->
+      <section class="sec s3">
+        <h2><span class="badge b3">3</span>地球系 vs 机体系 · 外旋 vs 内旋</h2>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>地球系 E（世界固定）</h3>
+            <canvas id="cEarth" width="460" height="280"></canvas>
+            <ul>
+              <li>原点常取起飞点</li>
+              <li>轴钉在地面上不动</li>
+              <li>看飞机相对地面怎么歪</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>机体系 B（跟着飞机）</h3>
+            <canvas id="cBody" width="460" height="280"></canvas>
+            <ul>
+              <li>原点在机体质心</li>
+              <li>X 前、Y 右、Z 下（课件）</li>
+              <li>陀螺 / 加速度计默认在 B</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="grid grid-2" style="margin-top:12px">
+          <div class="card">
+            <h3>外旋（定轴 · 世界轴不动）</h3>
+            <p>每一步都绕<strong>地球系固定轴</strong>转：Ze → Ye → Xe</p>
+            <p style="margin-top:6px"><span class="f">p′ = R<sub>x</sub> R<sub>y</sub> R<sub>z</sub> p</span></p>
+            <p style="margin-top:6px">俯仰时仍绕<strong>地面 Ye</strong>，不跟飞机走</p>
+          </div>
+          <div class="card">
+            <h3>内旋（动轴 · 课用 ZYX）</h3>
+            <p>每一步绕<strong>已经转过的机体轴</strong>：Z → Y′ → X″</p>
+            <p style="margin-top:6px"><span class="f">p<sub>e</sub> = R<sub>z</sub> R<sub>y</sub> R<sub>x</sub> p<sub>b</sub></span></p>
+            <p style="margin-top:6px">俯仰绕<strong>偏航后的 Yb</strong>，轴跟着飞机</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h3>内外旋对比动画（借鉴教学视频：同角度、不同转轴）</h3>
+          <canvas id="cCompare" width="980" height="360"></canvas>
+          <div class="step-bar" id="stepBar">
+            <span id="st0" class="on">① 偏航 ψ</span>
+            <span id="st1">② 俯仰 θ</span>
+            <span id="st2">③ 横滚 φ</span>
+          </div>
+          <div class="status" id="animStatus">
+            点「播放对比」：左右<strong>同一组角</strong>，看第二步俯仰时转轴是否相同。
+          </div>
+          <div class="btn-row">
+            <button type="button" id="playCompare">播放对比</button>
+            <button type="button" id="stepCompare">单步下一步</button>
+            <button type="button" class="alt" id="resetCompare">复位</button>
+          </div>
+          <div class="tip">
+            关键：偏航后做俯仰，<b>外旋绕固定 Ye</b>，<b>内旋绕跟着机体转的 Yb</b>——所以同样写 ZYX，内外旋结果不同。虚线=世界轴；彩色弧线=当前正在绕哪根轴转。
+          </div>
+        </div>
+        <div class="speak">口播：姿态 = 机体系相对地球系的关系。传感器在 B，乘姿态矩阵变到 E。</div>
+      </section>
+
+      <div class="arrow">▼<small>数学抽象 → 欧拉角</small></div>
+
+      <!-- ========== PART 4 ========== -->
+      <section class="sec s4">
+        <h2><span class="badge b4">4</span>欧拉角：性质 · 不连续 · 万向锁</h2>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>欧拉角是什么</h3>
+            <p>把完整姿态拆成<strong>三个依次旋转的角</strong>（ψ, θ, φ）。</p>
+            <p style="margin-top:8px">直观、好讲，适合人读；飞控内部通常不长期用它做状态。</p>
+            <ul>
+              <li>依赖旋转顺序（ZYX ≠ XYZ）</li>
+              <li>矩阵乘法<strong>不可交换</strong></li>
+              <li>角有周期，表示可以跳变（如 ±180°）→ 看起来「不连续」</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>会带来：万向锁</h3>
+            <canvas id="cGimbal" width="460" height="240"></canvas>
+            <p style="margin-top:8px">当俯仰 θ → ±90°，偏航轴与滚转轴重合 → <strong>丢掉一个自由度</strong>。</p>
+            <div class="btn-row">
+              <button type="button" id="lockOn">演示进入万向锁</button>
+              <button type="button" class="alt" id="lockOff">恢复正常</button>
+            </div>
+          </div>
+        </div>
+        <div class="tip">
+          口播收束：欧拉角方便描述，但不连续、有顺序、有奇点（万向锁）。所以后面要用旋转矩阵 / 轴角 / 四元数。
+        </div>
+      </section>
+
+      <div class="arrow">▼</div>
+
+      <div class="end">
+        <h2 style="margin:0 0 8px;font-size:18px">今天一条线</h2>
+        <p style="margin:0;font-size:14px;line-height:1.7">
+          刚体能转 → 要选坐标系（右手）→ 地球系 / 机体系 + 内旋外旋 →
+          抽象成欧拉角 → 性质有坑 → <b>万向锁</b>
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script>
+if (typeof THREE !== 'undefined' && !THREE.Group.prototype.clear) {
+  THREE.Group.prototype.clear = function(){
+    while(this.children.length) this.remove(this.children[0]);
+  };
+}
+/* ---------- math ---------- */
+function Rx(a){const c=Math.cos(a),s=Math.sin(a);return [[1,0,0],[0,c,-s],[0,s,c]];}
+function Ry(a){const c=Math.cos(a),s=Math.sin(a);return [[c,0,s],[0,1,0],[-s,0,c]];}
+function Rz(a){const c=Math.cos(a),s=Math.sin(a);return [[c,-s,0],[s,c,0],[0,0,1]];}
+function mul(A,B){
+  const C=[[0,0,0],[0,0,0],[0,0,0]];
+  for(let i=0;i<3;i++) for(let j=0;j<3;j++)
+    C[i][j]=A[i][0]*B[0][j]+A[i][1]*B[1][j]+A[i][2]*B[2][j];
+  return C;
+}
+function mv(M,v){return [
+  M[0][0]*v[0]+M[0][1]*v[1]+M[0][2]*v[2],
+  M[1][0]*v[0]+M[1][1]*v[1]+M[1][2]*v[2],
+  M[2][0]*v[0]+M[2][1]*v[1]+M[2][2]*v[2]
+];}
+function deg(d){return d*Math.PI/180;}
+
+function iso(p){
+  return [(p[0]-p[1])*0.82, p[2]*0.95 + (p[0]+p[1])*0.28];
+}
+
+function clear(ctx,w,h){
+  ctx.fillStyle="#ffffff";
+  ctx.fillRect(0,0,w,h);
+}
+
+function arrow(ctx,a,b,color,label){
+  ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]);
+  ctx.strokeStyle=color; ctx.lineWidth=3; ctx.lineCap="round"; ctx.stroke();
+  const ang=Math.atan2(b[1]-a[1],b[0]-a[0]);
+  ctx.beginPath();
+  ctx.moveTo(b[0],b[1]);
+  ctx.lineTo(b[0]-9*Math.cos(ang-.4), b[1]-9*Math.sin(ang-.4));
+  ctx.lineTo(b[0]-9*Math.cos(ang+.4), b[1]-9*Math.sin(ang+.4));
+  ctx.closePath(); ctx.fillStyle=color; ctx.fill();
+  if(label){ ctx.font="13px Segoe UI, Microsoft YaHei, sans-serif"; ctx.fillText(label,b[0]+4,b[1]-2); }
+}
+
+function mapFactory(ctx, scale, ox, oy){
+  return p => {
+    const q=iso(p);
+    return [ox + q[0]*scale, oy - q[1]*scale];
+  };
+}
+
+const plane = [[1,0,0],[-.45,.55,0],[-.2,0,0],[-.45,-.55,0]];
+
+function drawPlane(ctx, map, R, fill){
+  const pts=plane.map(p=>map(mv(R,p)));
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0],pts[0][1]);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+  ctx.closePath();
+  ctx.fillStyle=fill; ctx.fill();
+  ctx.strokeStyle="#334155"; ctx.lineWidth=1.2; ctx.stroke();
+}
+
+function drawAxes(ctx, map, R, labels, len=1.15, dashed=false){
+  const o=map([0,0,0]);
+  const cols=["#0d9488","#e11d48","#2563eb"];
+  [[len,0,0],[0,len,0],[0,0,len]].forEach((t,i)=>{
+    const a=map(mv(R,t));
+    if(dashed){
+      ctx.beginPath(); ctx.moveTo(o[0],o[1]); ctx.lineTo(a[0],a[1]);
+      ctx.strokeStyle=cols[i]; ctx.lineWidth=2; ctx.setLineDash([6,5]);
+      ctx.globalAlpha=0.55; ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha=1;
+      ctx.font="12px Segoe UI, Microsoft YaHei"; ctx.fillStyle=cols[i];
+      ctx.fillText(labels[i], a[0]+4, a[1]-2);
+    } else {
+      arrow(ctx,o,a,cols[i],labels[i]);
+    }
+  });
+}
+
+function axisDir(R, local){
+  return mv(R, local);
+}
+
+function drawRotArc(ctx, map, axis, angle, color, radius=0.55){
+  if(Math.abs(angle)<0.01) return;
+  const ax = axisDir([[1,0,0],[0,1,0],[0,0,1]], axis);
+  const n = Math.sqrt(ax[0]*ax[0]+ax[1]*ax[1]+ax[2]*ax[2]) || 1;
+  const u = [ax[0]/n, ax[1]/n, ax[2]/n];
+  // pick helper not parallel to u
+  let h = Math.abs(u[2])<0.9 ? [0,0,1] : [0,1,0];
+  let v1 = mv([[0,-h[2],h[1]],[h[2],0,-h[0]],[-h[1],h[0],0]], u);
+  let n1 = Math.sqrt(v1[0]*v1[0]+v1[1]*v1[1]+v1[2]*v1[2]) || 1;
+  v1 = [v1[0]/n1, v1[1]/n1, v1[2]/n1];
+  const v2 = mv([[0,-u[2],u[1]],[u[2],0,-u[0]],[-u[1],u[0],0]], v1);
+  const o = map([0,0,0]);
+  ctx.beginPath();
+  const N = 28;
+  for(let i=0;i<=N;i++){
+    const t = angle * i / N;
+    const p = [v1[0]*Math.cos(t)*radius + v2[0]*Math.sin(t)*radius,
+               v1[1]*Math.cos(t)*radius + v2[1]*Math.sin(t)*radius,
+               v1[2]*Math.cos(t)*radius + v2[2]*Math.sin(t)*radius];
+    const q = map(p);
+    if(i===0) ctx.moveTo(q[0],q[1]); else ctx.lineTo(q[0],q[1]);
+  }
+  ctx.strokeStyle=color; ctx.lineWidth=5; ctx.lineCap="round"; ctx.stroke();
+  // axis highlight
+  const tip = map([u[0]*1.25, u[1]*1.25, u[2]*1.25]);
+  ctx.beginPath(); ctx.moveTo(o[0],o[1]); ctx.lineTo(tip[0],tip[1]);
+  ctx.strokeStyle=color; ctx.lineWidth=4; ctx.stroke();
+}
+
+function drawGrid(ctx, map){
+  ctx.strokeStyle="#e2e8f0"; ctx.lineWidth=1;
+  for(let i=-2;i<=2;i++){
+    const a=map([i,-2,0]), b=map([i,2,0]);
+    const c=map([-2,i,0]), d=map([2,i,0]);
+    ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(c[0],c[1]); ctx.lineTo(d[0],d[1]); ctx.stroke();
+  }
+}
+
+/* ---------- Part 1: Three.js 3D ---------- */
+let t1 = 0, run1 = true;
+let scenePoint, sceneRigid;
+
+function createAirplane3D(){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshPhongMaterial({ color: 0x7c3aed, shininess: 40 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 1.1, 16), mat);
+  body.rotation.z = Math.PI / 2;
+  g.add(body);
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.35, 0.45), mat);
+  g.add(wing);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.42, 0.22), mat);
+  tail.position.set(-0.48, 0, 0.18);
+  g.add(tail);
+  const nose = new THREE.Mesh(
+    new THREE.ConeGeometry(0.11, 0.28, 10),
+    new THREE.MeshPhongMaterial({ color: 0xf59e0b })
+  );
+  nose.rotation.z = -Math.PI / 2;
+  nose.position.set(0.62, 0, 0);
+  g.add(nose);
+  // 机体轴：X绿(前) Y红(右) Z蓝(上) — 与后面章节颜色一致
+  const axLen = 0.85;
+  g.add(new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), axLen, 0x0d9488, 0.12, 0.06));
+  g.add(new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0), axLen, 0xe11d48, 0.12, 0.06));
+  g.add(new THREE.ArrowHelper(new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,0), axLen, 0x2563eb, 0.12, 0.06));
+  return g;
+}
+
+function makeScene3D(container, isRigid){
+  const w = container.clientWidth || 460;
+  const h = 280;
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xf8fafc);
+  scene.fog = new THREE.Fog(0xf8fafc, 8, 18);
+
+  const camera = new THREE.PerspectiveCamera(42, w / h, 0.1, 50);
+  camera.position.set(5.5, 4, 5.5);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(w, h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  container.appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.85);
+  sun.position.set(6, 10, 4);
+  scene.add(sun);
+
+  const grid = new THREE.GridHelper(7, 14, 0x94a3b8, 0xe2e8f0);
+  grid.position.y = -0.8;
+  scene.add(grid);
+
+  // 世界坐标轴（细）
+  scene.add(new THREE.AxesHelper(1.6));
+
+  let mesh, trail = [];
+  if(isRigid){
+    mesh = createAirplane3D();
+  } else {
+    mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.2, 28, 28),
+      new THREE.MeshPhongMaterial({ color: 0x0ea5e9, shininess: 60 })
+    );
+  }
+  scene.add(mesh);
+
+  // 轨迹线
+  const trailGeo = new THREE.BufferGeometry();
+  const trailPos = new Float32Array(300 * 3);
+  trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
+  const trailLine = new THREE.Line(
+    trailGeo,
+    new THREE.LineBasicMaterial({ color: isRigid ? 0xa78bfa : 0x38bdf8, transparent: true, opacity: 0.45 })
+  );
+  scene.add(trailLine);
+
+  return { scene, camera, renderer, mesh, trailLine, trailPos, trailIdx: 0, isRigid, container };
+}
+
+function path3D(t){
+  return {
+    x: 2.0 * Math.sin(t * 0.65),
+    y: 0.55 * Math.sin(t * 1.3) + 0.2,
+    z: 2.0 * Math.cos(t * 0.65)
+  };
+}
+
+function updateTrail(s, x, y, z){
+  const i = s.trailIdx % 100;
+  s.trailPos[i * 3] = x;
+  s.trailPos[i * 3 + 1] = y;
+  s.trailPos[i * 3 + 2] = z;
+  s.trailIdx++;
+  const n = Math.min(s.trailIdx, 100);
+  s.trailLine.geometry.setDrawRange(0, n);
+  s.trailLine.geometry.attributes.position.needsUpdate = true;
+}
+
+function animatePart1(){
+  if(run1) t1 += 0.018;
+  const p = path3D(t1);
+
+  scenePoint.mesh.position.set(p.x, p.y, p.z);
+  sceneRigid.mesh.position.set(p.x, p.y, p.z);
+  sceneRigid.mesh.rotation.order = 'ZYX';
+  sceneRigid.mesh.rotation.set(
+    t1 * 0.55,  // roll
+    t1 * 0.42,  // pitch
+    t1 * 0.75   // yaw
+  );
+
+  updateTrail(scenePoint, p.x, p.y, p.z);
+  updateTrail(sceneRigid, p.x, p.y, p.z);
+
+  const camOrbit = t1 * 0.12;
+  [scenePoint, sceneRigid].forEach((s, i) => {
+    const r = 7.2;
+    const off = i * 0.25;
+    s.camera.position.set(
+      p.x + r * Math.sin(camOrbit + off),
+      p.y + 3.2,
+      p.z + r * Math.cos(camOrbit + off)
+    );
+    s.camera.lookAt(p.x, p.y, p.z);
+    s.renderer.render(s.scene, s.camera);
+  });
+
+  requestAnimationFrame(animatePart1);
+}
+
+function initPart1(){
+  if(typeof THREE === 'undefined'){
+    document.querySelector('.s1 .speak').textContent =
+      '需要联网加载 Three.js 才能显示三维动画，请检查网络后刷新页面。';
+    return;
+  }
+  const vp = document.getElementById('viewPoint');
+  const vr = document.getElementById('viewRigid');
+  if(vp.querySelector('canvas')) return;
+  scenePoint = makeScene3D(vp, false);
+  sceneRigid = makeScene3D(vr, true);
+  animatePart1();
+}
+document.getElementById('play1').onclick = () => { run1 = true; };
+document.getElementById('pause1').onclick = () => { run1 = false; };
+window.addEventListener('resize', () => {
+  [scenePoint, sceneRigid].forEach(s => {
+    if(!s) return;
+    const w = s.container.clientWidth || 460;
+    s.camera.aspect = w / 280;
+    s.camera.updateProjectionMatrix();
+    s.renderer.setSize(w, 280);
+  });
+  eulerScenes.forEach(s => {
+    if(!s) return;
+    const w = s.container.clientWidth || 300;
+    s.camera.aspect = w / 240;
+    s.camera.updateProjectionMatrix();
+    s.renderer.setSize(w, 240);
+  });
+  resizeEulerInteractive();
+});
+
+/* ---------- Part 2: 嵌入式欧拉角交互演示 ---------- */
+const EI_STATUS = {
+  yaw:   '<b>偏航 ψ</b>：绕蓝色 z 轴，机头左右摆。可从俯视角度看。',
+  pitch: '<b>俯仰 θ</b>：绕红色 y 轴，机头抬起或低下。可从侧面看。',
+  roll:  '<b>横滚 φ</b>：绕绿色 x 轴，两翼一上一下。正面看最清楚。',
+  none:  '复位后：机头朝你、两翼水平。点按钮看单一动作。'
+};
+let eiMode = null, eiAutoPlay = false, eiT = 0;
+let eiScene, eiCamera, eiRenderer, eiControls, eiActiveGroup, eiHighlightGroup;
+let eiGizmoScene, eiGizmoCam, eiGizmoRenderer;
+let eiViewW, eiViewH = 420;
+
+function eiCreatePlane(ghost){
+  const g = new THREE.Group();
+  const main = new THREE.MeshPhongMaterial({
+    color: ghost ? 0xf9a8d4 : 0x7cb8f8,
+    transparent: ghost, opacity: ghost ? 0.28 : 1, shininess: 45
+  });
+  const accent = new THREE.MeshPhongMaterial({
+    color: ghost ? 0xf472b6 : 0x3b82f6,
+    transparent: ghost, opacity: ghost ? 0.25 : 1
+  });
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.26, 0.3), main));
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.4, 14), accent);
+  nose.rotation.z = -Math.PI / 2;
+  nose.position.x = 0.88;
+  g.add(nose);
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.1, 0.06), main);
+  wing.position.x = 0.04;
+  g.add(wing);
+  const vtail = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.02, 0.36), main);
+  vtail.position.set(-0.66, 0, 0.22);
+  g.add(vtail);
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.7, 0.05), main)).position.set(-0.7, 0, 0);
+  g.scale.setScalar(0.68);
+  return g;
+}
+
+function eiMakeHighlight(mode){
+  const g = new THREE.Group();
+  const col = { yaw: 0x2563eb, pitch: 0xe11d48, roll: 0x0d9488 };
+  const dir = { yaw: [0,0,1], pitch: [0,1,0], roll: [1,0,0] };
+  const d = dir[mode];
+  g.add(new THREE.ArrowHelper(
+    new THREE.Vector3(d[0],d[1],d[2]), new THREE.Vector3(0,0,0),
+    2.0, col[mode], 0.18, 0.09
+  ));
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.55, 0.035, 8, 40, Math.PI * 0.65),
+    new THREE.MeshBasicMaterial({ color: col[mode], transparent: true, opacity: 0.55 })
+  );
+  if(mode === 'roll'){
+    ring.rotation.y = Math.PI / 2;
+    ring.position.set(0.05, 0.85, 0);
+  } else if(mode === 'pitch'){
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(0.75, 0, 0);
+  } else {
+    ring.position.set(0, 0, 0.1);
+  }
+  g.add(ring);
+  return g;
+}
+
+function eiInitGizmo(){
+  eiGizmoScene = new THREE.Scene();
+  eiGizmoCam = new THREE.OrthographicCamera(-1.1, 1.1, 1.1, -1.1, 0.1, 10);
+  eiGizmoCam.position.set(4, 0, 0);
+  eiGizmoCam.up.set(0, 0, 1);
+  eiGizmoCam.lookAt(0, 0, 0);
+  const L = 0.75;
+  eiGizmoScene.add(new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), L, 0x0d9488, 0.07, 0.035));
+  eiGizmoScene.add(new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0), L, 0xe11d48, 0.07, 0.035));
+  eiGizmoScene.add(new THREE.ArrowHelper(new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,0), L, 0x2563eb, 0.07, 0.035));
+}
+
+function eiSetFrontView(){
+  eiCamera.position.set(6.2, 0, 0);
+  eiCamera.up.set(0, 0, 1);
+  eiControls.target.set(0, 0, 0);
+  eiControls.update();
+}
+
+function eiApplyAngle(a){
+  eiActiveGroup.rotation.set(0, 0, 0);
+  if(eiMode === 'yaw')   eiActiveGroup.rotation.z = a;
+  if(eiMode === 'pitch') eiActiveGroup.rotation.y = a;
+  if(eiMode === 'roll')  eiActiveGroup.rotation.x = a;
+}
+
+function eiUpdatePlayBtn(){
+  document.getElementById('btnEulerPlay').textContent =
+    eiAutoPlay ? '⏸ 暂停自动播放' : '▶ 自动往复播放';
+}
+
+function eiSetMode(m){
+  eiMode = m;
+  eiAutoPlay = true;
+  eiT = 0;
+  document.getElementById('eulerAngSlider').value = 0;
+  document.getElementById('eulerAngVal').textContent = '0°';
+  eiApplyAngle(0);
+  ['btnEulerYaw','btnEulerPitch','btnEulerRoll'].forEach(id =>
+    document.getElementById(id).classList.remove('active'));
+  document.getElementById('btnEuler' + m.charAt(0).toUpperCase() + m.slice(1)).classList.add('active');
+  document.getElementById('eulerStatus').innerHTML = EI_STATUS[m];
+  eiHighlightGroup.clear();
+  eiHighlightGroup.add(eiMakeHighlight(m));
+  eiUpdatePlayBtn();
+}
+
+function eiResetAll(){
+  eiMode = null;
+  eiAutoPlay = false;
+  eiT = 0;
+  eiActiveGroup.rotation.set(0, 0, 0);
+  eiHighlightGroup.clear();
+  document.getElementById('eulerAngSlider').value = 0;
+  document.getElementById('eulerAngVal').textContent = '0°';
+  ['btnEulerYaw','btnEulerPitch','btnEulerRoll'].forEach(id =>
+    document.getElementById(id).classList.remove('active'));
+  document.getElementById('eulerStatus').innerHTML = EI_STATUS.none;
+  eiSetFrontView();
+  eiUpdatePlayBtn();
+}
+
+function eiOnSlider(){
+  eiAutoPlay = false;
+  const deg = +document.getElementById('eulerAngSlider').value;
+  eiApplyAngle(deg * Math.PI / 180);
+  document.getElementById('eulerAngVal').textContent = deg + '°';
+  eiUpdatePlayBtn();
+}
+
+function eiRenderGizmo(){
+  eiGizmoRenderer.render(eiGizmoScene, eiGizmoCam);
+}
+
+function eiAnimate(){
+  requestAnimationFrame(eiAnimate);
+  if(eiMode && eiAutoPlay){
+    eiT += 0.02;
+    const a = Math.sin(eiT) * 0.5;
+    eiApplyAngle(a);
+    const deg = Math.round(a * 180 / Math.PI);
+    document.getElementById('eulerAngSlider').value = deg;
+    document.getElementById('eulerAngVal').textContent = deg + '°';
+  }
+  eiControls.update();
+  eiRenderer.render(eiScene, eiCamera);
+  eiRenderGizmo();
+}
+
+function resizeEulerInteractive(){
+  const container = document.getElementById('viewEulerInteractive');
+  if(!container || !eiRenderer) return;
+  eiViewW = container.clientWidth;
+  eiCamera.aspect = eiViewW / eiViewH;
+  eiCamera.updateProjectionMatrix();
+  eiRenderer.setSize(eiViewW, eiViewH);
+}
+
+function initEulerInteractive(){
+  if(typeof THREE === 'undefined' || typeof THREE.OrbitControls === 'undefined') return;
+  const container = document.getElementById('viewEulerInteractive');
+  if(!container || container.querySelector('#mainEulerCanvas')) return;
+
+  eiViewW = container.clientWidth;
+  eiScene = new THREE.Scene();
+  eiScene.background = new THREE.Color(0xeef3f8);
+
+  eiCamera = new THREE.PerspectiveCamera(42, eiViewW / eiViewH, 0.1, 50);
+  eiCamera.up.set(0, 0, 1);
+
+  eiRenderer = new THREE.WebGLRenderer({ antialias: true, canvas: document.createElement('canvas') });
+  eiRenderer.domElement.id = 'mainEulerCanvas';
+  eiRenderer.setSize(eiViewW, eiViewH);
+  eiRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  container.insertBefore(eiRenderer.domElement, container.firstChild);
+
+  eiGizmoRenderer = new THREE.WebGLRenderer({
+    antialias: true,
+    canvas: document.getElementById('gizmoCanvasEuler'),
+    alpha: true
+  });
+  eiGizmoRenderer.setSize(120, 80);
+  eiGizmoRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  eiGizmoRenderer.setClearColor(0xffffff, 0);
+
+  eiControls = new THREE.OrbitControls(eiCamera, eiRenderer.domElement);
+  eiControls.enableDamping = true;
+  eiControls.dampingFactor = 0.07;
+  eiControls.minDistance = 3;
+  eiControls.maxDistance = 12;
+
+  eiScene.add(new THREE.AmbientLight(0xffffff, 0.65));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.95);
+  sun.position.set(5, 8, 6);
+  eiScene.add(sun);
+
+  const grid = new THREE.GridHelper(7, 14, 0x94a3b8, 0xd5dee8);
+  grid.rotation.x = Math.PI / 2;
+  grid.position.z = -0.55;
+  eiScene.add(grid);
+
+  eiScene.add(eiCreatePlane(true));
+  eiActiveGroup = new THREE.Group();
+  eiActiveGroup.add(eiCreatePlane(false));
+  eiHighlightGroup = new THREE.Group();
+  eiActiveGroup.add(eiHighlightGroup);
+  eiScene.add(eiActiveGroup);
+
+  eiInitGizmo();
+  eiSetFrontView();
+
+  document.getElementById('btnEulerYaw').onclick   = () => eiSetMode('yaw');
+  document.getElementById('btnEulerPitch').onclick = () => eiSetMode('pitch');
+  document.getElementById('btnEulerRoll').onclick  = () => eiSetMode('roll');
+  document.getElementById('btnEulerReset').onclick = eiResetAll;
+  document.getElementById('btnEulerFront').onclick = eiSetFrontView;
+  document.getElementById('btnEulerPlay').onclick  = () => { eiAutoPlay = !eiAutoPlay; eiUpdatePlayBtn(); };
+  document.getElementById('eulerAngSlider').oninput = eiOnSlider;
+
+  eiResetAll();
+  eiAnimate();
+}
+
+function createPlaneModel(opts){
+  const ghost = !!opts.ghost;
+  const showAxes = opts.showAxes !== false && !ghost;
+  const g = new THREE.Group();
+  const main = new THREE.MeshPhongMaterial({
+    color: ghost ? 0xf9a8d4 : 0x7cb8f8,
+    transparent: ghost, opacity: ghost ? 0.32 : 1,
+    shininess: 35, side: THREE.DoubleSide
+  });
+  const accent = new THREE.MeshPhongMaterial({
+    color: ghost ? 0xf472b6 : 0x3b82f6,
+    transparent: ghost, opacity: ghost ? 0.28 : 1
+  });
+
+  const fuse = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.26, 0.3), main);
+  g.add(fuse);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.42, 14), accent);
+  nose.rotation.z = -Math.PI / 2;
+  nose.position.x = 0.9;
+  g.add(nose);
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(0.32, 2.05, 0.07), main);
+  wing.position.x = 0.05;
+  g.add(wing);
+  const vtail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.02, 0.38), main);
+  vtail.position.set(-0.68, 0, 0.24);
+  g.add(vtail);
+  const hstab = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.72, 0.05), main);
+  hstab.position.set(-0.72, 0, 0);
+  g.add(hstab);
+  [[0.2, 0.75], [0.2, -0.75]].forEach(([x, y]) => {
+    const eng = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.3, 10), accent);
+    eng.rotation.x = Math.PI / 2;
+    eng.position.set(x, y, -0.2);
+    g.add(eng);
+  });
+
+  if(showAxes){
+    const L = 1.05;
+    g.add(new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), L, 0x0d9488, 0.09, 0.05));
+    g.add(new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0), L, 0xe11d48, 0.09, 0.05));
+    g.add(new THREE.ArrowHelper(new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,0), L, 0x2563eb, 0.09, 0.05));
+  }
+  g.scale.setScalar(opts.scale || 0.62);
+  return g;
+}
+
+function createMotionArc(type){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: 0xdc2626 });
+  if(type === 'roll'){
+    // 正面看：两翼各一个红弧（像参考图）
+    [-1, 1].forEach(sign => {
+      const arc = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.04, 8, 24, Math.PI * 0.7), mat);
+      arc.rotation.y = Math.PI / 2;
+      arc.position.set(0.05, sign * 0.92, 0);
+      g.add(arc);
+    });
+    return g;
+  }
+  const arc = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.045, 8, 28, Math.PI * 0.75), mat);
+  if(type === 'pitch'){
+    arc.rotation.x = Math.PI / 2;
+    arc.position.set(0.82, 0, 0.08);
+  } else {
+    // yaw 俯视：机头附近水平弧
+    arc.position.set(0.55, 0, -0.15);
+    arc.rotation.x = Math.PI / 2;
+    arc.rotation.z = Math.PI / 2;
+  }
+  g.add(arc);
+  return g;
+}
+
+/* ---------- Part 2: 小飞机 + 参考姿态 演示 ---------- */
+// 机头沿 +x：横滚=正面看机头，俯仰=侧面看，偏航=俯视
+const EULER_CAM = {
+  roll:  { pos: [5.8, 0, 0],    up: [0, 1, 0] },  // 机头朝你，翼水平
+  pitch: { pos: [0, 5.8, 0],    up: [0, 0, 1] },  // 侧面看抬头低头
+  yaw:   { pos: [0, 0, 6.2],    up: [0, 1, 0] }   // 俯视看机头左右
+};
+let eulerScenes = [];
+let tEuler = 0;
+
+function buildPlaneEulerDemo(type){
+  const root = new THREE.Group();
+  root.add(createPlaneModel({ ghost: true, showAxes: false }));
+
+  const active = new THREE.Group();
+  active.add(createPlaneModel({ ghost: false, showAxes: true }));
+  active.add(createMotionArc(type));
+  root.add(active);
+
+  const setAngle = a => {
+    active.rotation.set(0, 0, 0);
+    if(type === 'roll')  active.rotation.x = a;
+    if(type === 'pitch') active.rotation.y = a;
+    if(type === 'yaw')   active.rotation.z = a;
+  };
+  return { root, setAngle };
+}
+
+function makeEulerScene(container, type){
+  const w = container.clientWidth || 300;
+  const h = 240;
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xe8f0f8);
+  scene.fog = new THREE.Fog(0xe8f0f8, 6, 14);
+
+  const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 40);
+  const cam = EULER_CAM[type];
+  camera.position.set(...cam.pos);
+  camera.up.set(...cam.up);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(w, h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  container.appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+  sun.position.set(5, 8, 4);
+  scene.add(sun);
+
+  const grid = new THREE.GridHelper(5, 10, 0xb0bec5, 0xdce3eb);
+  grid.position.y = -0.55;
+  scene.add(grid);
+
+  const axisDemo = buildPlaneEulerDemo(type);
+  scene.add(axisDemo.root);
+
+  return { scene, camera, renderer, axisDemo, type, container };
+}
+
+function animateEulerTriplets(){
+  if(typeof THREE !== 'undefined'){
+    tEuler += 0.02;
+    const ang = Math.sin(tEuler) * 0.55;
+    eulerScenes.forEach(s => {
+      s.axisDemo.setAngle(ang);
+      s.camera.lookAt(0, 0, 0);
+      s.renderer.render(s.scene, s.camera);
+    });
+  }
+  requestAnimationFrame(animateEulerTriplets);
+}
+
+function initEulerTriplets(){
+  if(typeof THREE === 'undefined') return;
+  ['viewRoll','viewPitch','viewYaw'].forEach(id => {
+    const el = document.getElementById(id);
+    const c = el.querySelector('canvas');
+    if(c) c.remove();
+  });
+  eulerScenes = [
+    makeEulerScene(document.getElementById('viewRoll'), 'roll'),
+    makeEulerScene(document.getElementById('viewPitch'), 'pitch'),
+    makeEulerScene(document.getElementById('viewYaw'), 'yaw')
+  ];
+  animateEulerTriplets();
+}
+
+/* ---------- Part 2 hand frames ---------- */
+function drawHandFrames(){
+  const right=document.getElementById("cRight").getContext("2d");
+  const left=document.getElementById("cLeft").getContext("2d");
+  [[right,true],[left,false]].forEach(([ctx,isRight])=>{
+    clear(ctx,460,280);
+    const map=mapFactory(ctx,78,230,160);
+    const R=isRight? [[1,0,0],[0,1,0],[0,0,1]] : [[1,0,0],[0,1,0],[0,0,-1]];
+    // ground grid-ish
+    ctx.strokeStyle="#e2e8f0"; ctx.lineWidth=1;
+    for(let i=-2;i<=2;i++){
+      const a=map(mv(R,[i,-2,0])), b=map(mv(R,[i,2,0]));
+      const c=map(mv(R,[-2,i,0])), d=map(mv(R,[2,i,0]));
+      ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(c[0],c[1]); ctx.lineTo(d[0],d[1]); ctx.stroke();
+    }
+    drawAxes(ctx, map, R, ["X","Y","Z"], 1.35);
+    ctx.fillStyle="#64748b"; ctx.font="13px Segoe UI, Microsoft YaHei";
+    ctx.fillText(isRight ? "右手：X×Y → Z（向上）" : "左手：Z 反向（对照）", 16, 28);
+  });
+}
+
+function drawTripleAxes(){
+  const ctx=document.getElementById("cAxes").getContext("2d");
+  clear(ctx,980,300);
+  const yaw=deg(+yawEl.value), pitch=deg(+pitchEl.value), roll=deg(+rollEl.value);
+  yv.textContent=yawEl.value+"°";
+  pv.textContent=pitchEl.value+"°";
+  rv.textContent=rollEl.value+"°";
+
+  const panels=[
+    {x:165, title:"绕 Z → 偏航 ψ", R:Rz(yaw), only:"Z"},
+    {x:490, title:"绕 Y → 俯仰 θ", R:Ry(pitch), only:"Y"},
+    {x:815, title:"绕 X → 横滚 φ", R:Rx(roll), only:"X"}
+  ];
+  panels.forEach(p=>{
+    const map=mapFactory(ctx,70,p.x,165);
+    ctx.fillStyle="#0f172a"; ctx.font="bold 14px Segoe UI, Microsoft YaHei";
+    ctx.fillText(p.title, p.x-80, 28);
+    drawAxes(ctx, map, [[1,0,0],[0,1,0],[0,0,1]], ["Xe","Ye","Ze"], 1.05);
+    drawPlane(ctx, map, p.R, "rgba(14,165,233,0.9)");
+    drawAxes(ctx, map, p.R, ["Xb","Yb","Zb"], 0.95);
+  });
+}
+
+const yawEl=document.getElementById("yaw");
+const pitchEl=document.getElementById("pitch");
+const rollEl=document.getElementById("roll");
+["yaw","pitch","roll"].forEach(id=>document.getElementById(id).oninput=drawTripleAxes);
+
+/* ---------- Part 3 compare animation (B站风格：左右对照 + 转轴弧线) ---------- */
+const DEMO = { yaw: 55, pitch: 32, roll: 28 }; // degrees
+let cmp = { step: 0, prog: 0, playing: false, mode: 'idle' };
+
+function lerp(a,b,t){ return a+(b-a)*t; }
+function ease(t){ return t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2; }
+
+function extrinsicR(yaw, pitch, roll){
+  // 外旋 Z→Y→X：绕固定 Ze, Ye, Xe
+  return mul(mul(Rx(roll), Ry(pitch)), Rz(yaw));
+}
+function intrinsicR(yaw, pitch, roll){
+  // 内旋 Z→Y→X：绕 Ze, 再绕转后 Y, 再绕转后 X
+  return mul(mul(Rz(yaw), Ry(pitch)), Rx(roll));
+}
+
+function partialExtrinsic(step, prog){
+  const y=deg(DEMO.yaw*prog), p=deg(DEMO.pitch*prog), r=deg(DEMO.roll*prog);
+  if(step===0) return Rz(y);
+  if(step===1) return mul(Ry(p), Rz(deg(DEMO.yaw)));
+  if(step===2) return mul(mul(Rx(r), Ry(deg(DEMO.pitch))), Rz(deg(DEMO.yaw)));
+  return extrinsicR(deg(DEMO.yaw), deg(DEMO.pitch), deg(DEMO.roll));
+}
+function partialIntrinsic(step, prog){
+  const y=deg(DEMO.yaw*prog), p=deg(DEMO.pitch*prog), r=deg(DEMO.roll*prog);
+  if(step===0) return Rz(y);
+  if(step===1) return mul(Rz(deg(DEMO.yaw)), Ry(p));
+  if(step===2) return mul(mul(Rz(deg(DEMO.yaw)), Ry(deg(DEMO.pitch))), Rx(r));
+  return intrinsicR(deg(DEMO.yaw), deg(DEMO.pitch), deg(DEMO.roll));
+}
+
+function activeAxisExtrinsic(step){
+  if(step===0) return { axis:[0,0,1], color:"#2563eb", label:"绕固定 Ze" };
+  if(step===1) return { axis:[0,1,0], color:"#e11d48", label:"绕固定 Ye" };
+  return { axis:[1,0,0], color:"#0d9488", label:"绕固定 Xe" };
+}
+function activeAxisIntrinsic(step, RsoFar){
+  if(step===0) return { axis:[0,0,1], color:"#2563eb", label:"绕 Ze（第一步相同）" };
+  if(step===1) return { axis: axisDir(RsoFar,[0,1,0]), color:"#e11d48", label:"绕机体 Yb（已偏航）" };
+  return { axis: axisDir(RsoFar,[1,0,0]), color:"#0d9488", label:"绕机体 Xb（已偏航+俯仰）" };
+}
+
+function drawComparePanel(ctx, cx, title, R, step, prog, isExtrinsic){
+  const map = mapFactory(ctx, 72, cx, 175);
+  ctx.fillStyle="#0f172a"; ctx.font="bold 15px Segoe UI, Microsoft YaHei";
+  ctx.fillText(title, cx-120, 24);
+  drawGrid(ctx, map);
+  drawAxes(ctx, map, [[1,0,0],[0,1,0],[0,0,1]], ["Xe","Ye","Ze"], 1.15, true);
+  drawPlane(ctx, map, R, isExtrinsic ? "rgba(249,115,22,0.9)" : "rgba(139,92,246,0.9)");
+  drawAxes(ctx, map, R, ["Xb","Yb","Zb"], 1.0, false);
+
+  const Rbefore = isExtrinsic
+    ? (step===0 ? [[1,0,0],[0,1,0],[0,0,1]] : step===1 ? Rz(deg(DEMO.yaw)) : mul(Ry(deg(DEMO.pitch)), Rz(deg(DEMO.yaw))))
+    : (step===0 ? [[1,0,0],[0,1,0],[0,0,1]] : step===1 ? Rz(deg(DEMO.yaw)) : mul(Rz(deg(DEMO.yaw)), Ry(deg(DEMO.pitch))));
+
+  const act = isExtrinsic ? activeAxisExtrinsic(step) : activeAxisIntrinsic(step, Rbefore);
+  const ang = prog * deg(step===0?DEMO.yaw:step===1?DEMO.pitch:DEMO.roll);
+  drawRotArc(ctx, map, act.axis, ang, act.color);
+
+  ctx.fillStyle=act.color; ctx.font="12px Segoe UI, Microsoft YaHei";
+  ctx.fillText(act.label, cx-110, 340);
+}
+
+function updateStepBar(step, prog){
+  [0,1,2].forEach(i=>{
+    const el=document.getElementById("st"+i);
+    el.className = i<step ? "done" : (i===step && prog<1 ? "on" : (i===step ? "on" : ""));
+    if(i<step) el.className="done";
+    else if(i===step) el.className="on";
+    else el.className="";
+  });
+}
+
+function updateStatus(step, prog){
+  const texts = [
+    "① 偏航：内外旋都绕 <b>固定 Ze</b>，这一步两边一样。",
+    "② 俯仰：<b>外旋绕固定 Ye</b>；<b>内旋绕偏航后的 Yb</b>——转轴已经不同了！",
+    "③ 横滚：外旋绕固定 Xe；内旋绕转完俯仰后的 Xb。",
+    "完成：同样 ψθφ，<b>内外旋最终姿态不同</b>（除非角很小或为零）。"
+  ];
+  const idx = step>=3 ? 3 : step;
+  document.getElementById("animStatus").innerHTML = texts[idx];
+  updateStepBar(Math.min(step,2), prog);
+}
+
+function drawCompare(){
+  const ctx = document.getElementById("cCompare").getContext("2d");
+  clear(ctx, 980, 360);
+
+  // divider
+  ctx.strokeStyle="#cbd5e1"; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(490,40); ctx.lineTo(490,350); ctx.stroke();
+
+  let step = cmp.step, prog = cmp.prog;
+  if(cmp.playing){
+    cmp.prog += 0.018;
+    if(cmp.prog >= 1){
+      cmp.prog = 0;
+      cmp.step += 1;
+      if(cmp.step > 2){ cmp.playing = false; cmp.step = 3; }
+    }
+    step = cmp.step; prog = ease(cmp.prog);
+  }
+
+  const s = Math.min(step, 2);
+  const p = step>=3 ? 1 : prog;
+  const Rex = step>=3 ? extrinsicR(deg(DEMO.yaw),deg(DEMO.pitch),deg(DEMO.roll))
+    : partialExtrinsic(s, p);
+  const Rin = step>=3 ? intrinsicR(deg(DEMO.yaw),deg(DEMO.pitch),deg(DEMO.roll))
+    : partialIntrinsic(s, p);
+
+  drawComparePanel(ctx, 245, "外旋（定轴）", Rex, s, p, true);
+  drawComparePanel(ctx, 735, "内旋（动轴 · 课用）", Rin, s, p, false);
+
+  ctx.fillStyle="#64748b"; ctx.font="12px Segoe UI, Microsoft YaHei";
+  ctx.fillText("虚线 = 世界轴固定", 24, 350);
+  ctx.fillText("彩色弧线 = 当前绕哪根轴在转", 720, 350);
+
+  updateStatus(step, p);
+  requestAnimationFrame(drawCompare);
+}
+
+function drawEarthBody(){
+  const ce=document.getElementById("cEarth").getContext("2d");
+  const cb=document.getElementById("cBody").getContext("2d");
+  clear(ce,460,280); clear(cb,460,280);
+  const yaw=deg(35), pitch=deg(18), roll=deg(25);
+  const R=mul(mul(Rz(yaw),Ry(pitch)),Rx(roll));
+
+  // earth-fixed view
+  let map=mapFactory(ce,72,230,155);
+  drawAxes(ce,map,[[1,0,0],[0,1,0],[0,0,1]],["Xe","Ye","Ze"],1.2);
+  drawPlane(ce,map,R,"rgba(37,99,235,0.9)");
+  drawAxes(ce,map,R,["Xb","Yb","Zb"],1.0);
+  ce.fillStyle="#64748b"; ce.font="13px Segoe UI, Microsoft YaHei";
+  ce.fillText("E 固定，飞机在转", 16, 28);
+
+  // body-fixed view: plane upright, world axes via R^T
+  map=mapFactory(cb,72,230,155);
+  const Rt=[[R[0][0],R[1][0],R[2][0]],[R[0][1],R[1][1],R[2][1]],[R[0][2],R[1][2],R[2][2]]];
+  drawPlane(cb,map,[[1,0,0],[0,1,0],[0,0,1]],"rgba(16,185,129,0.9)");
+  drawAxes(cb,map,[[1,0,0],[0,1,0],[0,0,1]],["Xb","Yb","Zb"],1.0);
+  drawAxes(cb,map,Rt,["Xe","Ye","Ze"],1.15);
+  cb.fillStyle="#64748b"; cb.font="13px Segoe UI, Microsoft YaHei";
+  cb.fillText("B 固定，世界轴在歪", 16, 28);
+}
+
+document.getElementById("playCompare").onclick = () => {
+  cmp = { step: 0, prog: 0, playing: true };
+};
+document.getElementById("stepCompare").onclick = () => {
+  if(cmp.step > 2) { cmp = { step: 0, prog: 0, playing: false }; return; }
+  if(cmp.prog < 1) { cmp.prog = 1; }
+  else { cmp.step += 1; cmp.prog = 0; }
+  cmp.playing = false;
+};
+document.getElementById("resetCompare").onclick = () => {
+  cmp = { step: 0, prog: 0, playing: false };
+  updateStatus(0, 0);
+};
+
+/* ---------- Part 4 gimbal ---------- */
+let gimbalLock=false;
+function drawGimbal(){
+  const ctx=document.getElementById("cGimbal").getContext("2d");
+  clear(ctx,460,240);
+  const pitch = gimbalLock ? deg(90) : deg(25);
+  const yaw = deg(20), roll = deg(15);
+  const R = mul(mul(Rz(yaw),Ry(pitch)),Rx(roll));
+  const map=mapFactory(ctx,70,230,130);
+  drawAxes(ctx,map,[[1,0,0],[0,1,0],[0,0,1]],["Xe","Ye","Ze"],1.1);
+  drawPlane(ctx,map,R, gimbalLock ? "rgba(239,68,68,0.9)" : "rgba(236,72,153,0.9)");
+  // highlight coincident axes when locked: Ze and body X
+  if(gimbalLock){
+    const o=map([0,0,0]);
+    arrow(ctx,o,map([0,0,1.4]),"#ca8a04","偏航轴");
+    arrow(ctx,o,map(mv(R,[1.4,0,0])),"#ea580c","滚转轴≈重合");
+    ctx.fillStyle="#b91c1c"; ctx.font="13px Segoe UI, Microsoft YaHei";
+    ctx.fillText("θ=90°：两轴重合 → 万向锁", 100, 28);
+  } else {
+    ctx.fillStyle="#64748b"; ctx.font="13px Segoe UI, Microsoft YaHei";
+    ctx.fillText("正常姿态：三个角互相独立", 110, 28);
+  }
+  requestAnimationFrame(drawGimbal);
+}
+document.getElementById("lockOn").onclick=()=>{gimbalLock=true;};
+document.getElementById("lockOff").onclick=()=>{gimbalLock=false;};
+
+/* boot */
+requestAnimationFrame(() => {
+  initPart1();
+  initEulerInteractive();
+  initEulerTriplets();
+  drawHandFrames();
+  drawTripleAxes();
+  drawEarthBody();
+  drawCompare();
+  drawGimbal();
+});
+</script>
+</body>
+</html>
