@@ -147,31 +147,138 @@ $$r^2 + \frac{K_d}{I} r + \frac{K_p}{I} = 0$$
 
 $$r = \frac{-\frac{K_d}{I} \pm \sqrt{\left(\frac{K_d}{I}\right)^2 - 4\frac{K_p}{I}}}{2}$$
 
+为了式子更简洁，我们令 $\alpha = \frac{K_d}{2I} > 0$（代表衰减速率参数）。判别式 $\Delta = \left(\frac{K_d}{I}\right)^2 - 4\frac{K_p}{I}$ 的正负，直接决定了数学解的形式与物理运动状态。
+
 **这就是系统会不会过冲振荡的决定性时刻！根号里面的表达式决定了三种命运：**
 
-1. **当 $K_d$ 较小，使得 $\left(\frac{K_d}{I}\right)^2 - 4\frac{K_p}{I} < 0$ 时**：
 
-   根号下为负数，解出复数根 $r = -\alpha \pm i \beta$。
 
-   此时 $\theta(t)$ 的解中包含衰减项 $e^{-\alpha t}$ 与振荡项 $\cos(\beta t)$。
+#### 1. 情况 1：欠阻尼（$\Delta < 0$，即 $K_d < 2\sqrt{K_p I}$）
 
-   - **物理表现**：飞行器虽然还会冲过头振荡，但因为 $e^{-\alpha t}$ 的存在，**振幅会一次比一次小，最终慢慢停下来**。
+设阻尼频率 $\omega_d = \frac{1}{2}\sqrt{4\frac{K_p}{I} - \left(\frac{K_d}{I}\right)^2}$，特征根为共轭复根 $r_{1,2} = -\alpha \pm i \omega_d$。
 
-2. **当 $K_d$ 大小刚好，使得 $\left(\frac{K_d}{I}\right)^2 - 4\frac{K_p}{I} = 0$ 时**：
+包含特解 $\theta_0$ 的通解形式为：
 
-   根号下为 0，解出两个相同的实根 $r = -\frac{K_d}{2I}$。
+$$\theta(t) = \theta_0 + e^{-\alpha t} \left( C_1 \cos(\omega_d t) + C_2 \sin(\omega_d t) \right)$$
 
-   此时解为 $\theta(t) = (C_1 + C_2 t) e^{-\frac{K_d}{2I} t}$，**完全没有虚数部分（没有 $\sin/\cos$ 振荡项）**！
+**代入初始条件求解常数**：
 
-   - **物理表现**：**最完美的状态**！飞行器以最快速度趋近目标角度，且完全不过冲、不振荡。此时解出的关系为：
+1. **代入角度条件**：
 
-$$K_d = 2 \sqrt{K_p \cdot I}$$
+   $$\theta(0) = \theta_0 + e^0 (C_1 \cdot 1 + 0) = \theta_0 + C_1 = \theta_0 + A \implies C_1 = A$$
 
-1. **当 $K_d$ 过大，使得 $\left(\frac{K_d}{I}\right)^2 - 4\frac{K_p}{I} > 0$ 时**：
+2. **求一阶导数**：
 
-   根号下为正数，解出两个不同的负实根。
+   $$\frac{\mathrm{d}\theta(t)}{\mathrm{d}t} = -\alpha e^{-\alpha t} (C_1 \cos(\omega_d t) + C_2 \sin(\omega_d t)) + e^{-\alpha t} (-\omega_d C_1 \sin(\omega_d t) + \omega_d C_2 \cos(\omega_d t))$$
 
-   - **物理表现**：阻力太大，飞行器像陷在浓稠的蜂蜜里一样，极其缓慢地爬升，很久都达不到目标角度。
+3. **代入角速度条件 $\frac{\mathrm{d}\theta(0)}{\mathrm{d}t} = 0$**：
+
+   $$\frac{\mathrm{d}\theta(0)}{\mathrm{d}t} = -\alpha C_1 + \omega_d C_2 = 0 \implies C_2 = \frac{\alpha A}{\omega_d}$$
+
+**特解表达**：
+
+$$\theta(t) = \theta_0 + A \cdot e^{-\frac{K_d}{2I} t} \left( \cos(\omega_d t) + \frac{K_d}{2 I \omega_d} \sin(\omega_d t) \right)$$
+
+- **物理本质**：包含余弦波与衰减项 $e^{-\alpha t}$。飞行器**穿过目标角度产生过冲与来回震荡，但由于阻尼不断吸收能量，振幅等比衰减，最终停在 $\theta_0$**。
+
+> 为什么物理上会“过冲并震荡”？
+
+看看上面的数学表达式，它由两部分乘积组成：
+
+- **$\cos(\omega_d t + \phi)$（正弦/余弦周期波）**：由于阻尼 $K_d$ 太小，不足以在飞行器到达 $0^\circ$ 前把旋转动能完全吸收。飞行器冲过头后，P 项（弹簧力）开始反向拉，又把它拉回来，导致物理上必然产生**来回晃动**。
+- **$e^{-\alpha t}$（衰减因子）**：因为 $\alpha = \frac{K_d}{2I} > 0$，所以指数项是一个随着时间 $t$ 增加而逐渐趋近于 0 的**衰减包络线**。
+
+**物理图像总结**：
+
+正弦波负责“来回过冲震荡”，包络线 $e^{-\alpha t}$ 负责“限制震荡幅值”。波峰受限于指数包络线，因此**振幅一次比一次小，呈现出等比衰减的波形，最终收敛到目标角度**。
+
+
+
+==演示==
+
+
+
+#### 2. 情况 2：临界阻尼（$\Delta = 0$，即 $K_d = 2\sqrt{K_p I}$）
+
+特征方程解出重根：$r_1 = r_2 = -\alpha = -\frac{K_d}{2I}$。
+
+通解形式为：
+
+$$\theta(t) = \theta_0 + (C_1 + C_2 t) e^{-\alpha t}$$
+
+**代入初始条件求解常数**：
+
+1. **代入角度条件**：
+
+   $$\theta(0) = \theta_0 + C_1 = \theta_0 + A \implies C_1 = A$$
+
+2. **求一阶导数**：
+
+   $$\frac{\mathrm{d}\theta(t)}{\mathrm{d}t} = C_2 e^{-\alpha t} - \alpha (C_1 + C_2 t) e^{-\alpha t}$$
+
+3. **代入角速度条件 $\frac{\mathrm{d}\theta(0)}{\mathrm{d}t} = 0$**：
+
+   $$\frac{\mathrm{d}\theta(0)}{\mathrm{d}t} = C_2 - \alpha C_1 = 0 \implies C_2 = \alpha A$$
+
+**特解表达**：
+
+$$\theta(t) = \theta_0 + A \left( 1 + \frac{K_d}{2I} t \right) e^{-\frac{K_d}{2I} t}$$
+
+- **物理本质**：没有虚数与正弦项，**完全不过冲、不振荡，以最快速度单调平滑收敛至目标姿态 $\theta_0$**（调参追求的最佳状态）。
+
+> 为什么物理上“既不过冲，速度又最快”？
+
+- **完全没有虚数，代表没有 $\sin/\cos$ 项**：从数学上直接切断了周期性振荡的根源，飞行器**绝对不会冲过头**。
+- **$(1 + \alpha t) e^{-\alpha t}$ 的数学特性**：对于 $t > 0$，函数值单调衰减，且衰减极快。
+- **临界点优势**：此时的 $K_d$ 刚好达到了“把过冲完全压制”所需的最小阻尼量。它既没有因为阻尼不够而冲过头，也没有因为阻尼过大而拖慢系统的响应速度。
+
+**物理图像总结**：
+
+飞行器从初始角度被释放后，像一块被精准控制的平滑机械臂，**以最快的时间单调上升，平滑吸附到目标角度上，过程零振荡、零超调**。
+
+#### 3. 情况 3：过阻尼（$\Delta > 0$，即 $K_d > 2\sqrt{K_p I}$）
+
+特征方程解出两个负实根 $r_1 = -\alpha + \beta, r_2 = -\alpha - \beta$（其中 $\beta = \sqrt{\alpha^2 - \frac{K_p}{I}} < \alpha$）。
+
+通解形式为：
+
+$$\theta(t) = \theta_0 + C_1 e^{(-\alpha + \beta)t} + C_2 e^{(-\alpha - \beta)t}$$
+
+**代入初始条件求解常数**：
+
+1. **代入角度条件**：
+
+   $$\theta(0) = \theta_0 + C_1 + C_2 = \theta_0 + A \implies C_1 + C_2 = A$$
+
+2. **代入角速度条件 $\frac{\mathrm{d}\theta(0)}{\mathrm{d}t} = 0$**：
+
+   $$\frac{\mathrm{d}\theta(0)}{\mathrm{d}t} = (-\alpha + \beta) C_1 + (-\alpha - \beta) C_2 = 0$$
+
+3. **联立方程组解得**：
+
+   $$C_1 = \frac{\alpha + \beta}{2\beta} A, \quad C_2 = \frac{\beta - \alpha}{2\beta} A$$
+
+**特解表达**：
+
+$$\theta(t) = \theta_0 + \frac{A}{2\beta} \left[ (\alpha + \beta) e^{-(\alpha - \beta)t} + (\beta - \alpha) e^{-(\alpha + \beta)t} \right]$$
+
+- **物理本质**：阻尼过大使得慢衰减项 $e^{-(\alpha - \beta)t}$ 主导过程，飞行器**移动极度缓慢，耗费极长的时间才能爬升回目标角度 $\theta_0$**。
+
+> 为什么物理上会“像陷在浓稠蜂蜜里一样缓慢”？
+
+注意这两个衰减速率：$\lambda_1$ 和 $\lambda_2$。
+
+- $\lambda_2 = \alpha + \sqrt{\dots}$ 很大，导致 $e^{-\lambda_2 t}$ 衰减极快，很快就衰减到 0 了。
+
+- **关键看 $\lambda_1$**：$\lambda_1 = \alpha - \sqrt{\left(\frac{K_d}{2I}\right)^2 - \frac{K_p}{I}}$。当 $K_d$ 变得极大时，$\sqrt{\left(\frac{K_d}{2I}\right)^2 - \frac{K_p}{I}} \approx \frac{K_d}{2I} = \alpha$，这使得：
+
+  $$\lambda_1 \to 0$$
+
+主导系统后半程运动的是 $e^{-\lambda_1 t}$。当指数项的系数 $\lambda_1$ 趋近于 0 时，$e^{-\lambda_1 t}$ 的衰减速度会**变得极其缓慢**！
+
+**物理图像总结**：
+
+阻尼力矩 $M_{damp} = -K_d \dot{\theta}$ 实在太大了。飞行器稍有一点旋转速度，巨大的 D 项就会施加极强的反向制动力。飞行器就像被卡在黏稠的蜂蜜里，P 项（弹簧拉力）费尽九牛二虎之力也拉不动它，导致**系统响应极其迟钝，要耗费极长的时间才能爬升到目标角度**。
 
 
 
