@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>四轴飞行器 PID 姿态控制 · 交互演示（俯仰角 θ）</title>
+<style>
+  :root{
+    --bg:#0b1018; --bg2:#0e1520;
+    --card:#141d2b; --card2:#101823;
+    --border:#23303f; --border2:#2c3c4f;
+    --text:#e9eff6; --muted:#8a9aad; --muted2:#5c6b7d;
+    --accent:#4dabf7;
+    --tp:#ffd166;   /* θ 角度 */
+    --te:#ff6b6b;   /* e 误差 */
+    --tv:#4dabf7;   /* ω 角速度 */
+    --ta:#c77dff;   /* α 角加速度 */
+    --ref:#69db7c;  /* 目标 θ0 */
+    --p:#ff6b6b; --i:#da77f2; --d:#4dabf7; --dist:#ffab40;
+    --shadow:0 8px 28px rgba(0,0,0,.38);
+    --mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:system-ui,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--text);
+    background:
+      radial-gradient(1200px 600px at 18% -10%, rgba(77,171,247,.09), transparent 60%),
+      radial-gradient(1000px 620px at 100% 0%, rgba(199,125,255,.08), transparent 55%),
+      linear-gradient(180deg,var(--bg2),var(--bg));
+    height:100vh; overflow:hidden; display:flex; flex-direction:column;
+  }
+
+  /* ---------------- 顶栏 ---------------- */
+  header{
+    flex:none; display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+    padding:10px 18px; border-bottom:1px solid var(--border);
+    background:rgba(11,16,24,.72); backdrop-filter:blur(8px);
+  }
+  .brand{display:flex; flex-direction:column; min-width:230px}
+  .brand h1{font-size:17px; font-weight:650; letter-spacing:.4px; display:flex; align-items:center; gap:8px}
+  .brand h1 .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+  .brand .sub{font-size:11.5px; color:var(--muted); margin-top:3px}
+  .formula{
+    flex:1; min-width:300px; text-align:center;
+    font-family:var(--mono); font-size:14.5px; color:var(--muted);
+    background:var(--card2); border:1px solid var(--border); border-radius:10px; padding:7px 14px;
+  }
+  .formula b{font-weight:650}
+  .cp{color:var(--p)} .ci{color:var(--i)} .cd{color:var(--d)}
+  .formula .tag{font-size:10.5px; color:var(--muted2)}
+  .badge{
+    flex:none; font-size:12.5px; font-weight:650; padding:7px 13px; border-radius:10px;
+    border:1px solid var(--border2); background:var(--card); white-space:nowrap;
+  }
+  .badge .z{font-family:var(--mono); font-weight:500; color:var(--muted); font-size:11.5px}
+  .actions{flex:none; display:flex; gap:7px}
+
+  /* ---------------- 主区 ---------------- */
+  main{
+    flex:1 1 auto; min-height:0; padding:14px 18px;
+    display:grid; grid-template-columns:minmax(330px,42fr) 58fr; gap:14px;
+  }
+  .card{
+    background:linear-gradient(180deg,var(--card),var(--card2));
+    border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow);
+    display:flex; flex-direction:column; min-height:0; overflow:hidden;
+  }
+  .card-head{
+    flex:none; display:flex; align-items:center; gap:8px;
+    padding:9px 14px; border-bottom:1px solid var(--border); font-size:12.5px; color:var(--muted);
+  }
+  .card-head .sw{width:9px;height:9px;border-radius:3px}
+  .card-head .tt{font-weight:600; color:var(--text); font-size:13.5px}
+  .card-head .hint{margin-left:auto; font-size:11px; color:var(--muted2)}
+
+  /* 场景 */
+  .scene-wrap{flex:1 1 auto; min-height:0; position:relative}
+  .scene-wrap canvas{position:absolute; inset:0; width:100%; height:100%; display:block}
+  .caption{
+    position:absolute; left:12px; right:12px; top:11px; z-index:5;
+    background:rgba(9,13,20,.9); border:1px solid var(--border2); border-radius:10px;
+    padding:9px 13px; font-size:12.5px; line-height:1.55; color:var(--text);
+    box-shadow:var(--shadow); backdrop-filter:blur(6px);
+  }
+  .caption .stage{color:var(--accent); font-weight:700; margin-right:8px; font-size:11.5px; letter-spacing:.3px}
+  .scene-foot{flex:none; border-top:1px solid var(--border); padding:9px 13px 11px; display:flex; flex-direction:column; gap:9px}
+  .readout{display:flex; gap:7px; flex-wrap:wrap}
+  .chip{
+    flex:1 1 auto; min-width:70px; background:var(--card2); border:1px solid var(--border);
+    border-radius:9px; padding:5px 9px; display:flex; flex-direction:column; gap:1px;
+  }
+  .chip .k{font-size:10px; color:var(--muted)}
+  .chip .v{font-family:var(--mono); font-size:14px; font-weight:600}
+  .chip .v small{font-size:9.5px; color:var(--muted); font-weight:400}
+  .pbars{display:flex; flex-direction:column; gap:4px}
+  .pbar{display:flex; align-items:center; gap:8px; font-size:11px}
+  .pbar .nm{width:72px; color:var(--muted); flex:none; font-family:var(--mono); font-size:10.5px}
+  .pbar .track{flex:1; height:9px; background:#0a1119; border:1px solid var(--border); border-radius:5px; position:relative; overflow:hidden}
+  .pbar .track::after{content:""; position:absolute; left:50%; top:0; bottom:0; width:1px; background:var(--border2)}
+  .pbar .fill{position:absolute; top:0; bottom:0; border-radius:4px; transition:left .05s linear,width .05s linear}
+  .fill.p{background:linear-gradient(90deg,#b83b3b,#ff6b6b)}
+  .fill.i{background:linear-gradient(90deg,#9c36c0,#da77f2)}
+  .fill.d{background:linear-gradient(90deg,#2b6cb0,#4dabf7)}
+  .fill.dist{background:linear-gradient(90deg,#b5762a,#ffab40)}
+  .pbar .val{width:96px; text-align:right; font-family:var(--mono); font-size:11px; color:var(--text); flex:none}
+
+  /* 图表 */
+  .charts-grid{
+    flex:1 1 auto; min-height:0;
+    display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:1px;
+    background:var(--border);
+  }
+  .chart{position:relative; background:var(--card2); min-width:0; min-height:0}
+  .chart canvas{position:absolute; inset:0; width:100%; height:100%; display:block}
+  .chart .legend{
+    position:absolute; right:9px; top:6px; z-index:2; font-size:11.5px; color:var(--muted);
+    display:flex; align-items:center; gap:6px; pointer-events:none;
+    background:rgba(10,17,25,.68); padding:2px 8px; border-radius:6px; border:1px solid var(--border);
+  }
+  .chart .legend .sw{width:8px;height:8px;border-radius:50%}
+  .chart .legend em{font-style:normal; color:var(--muted2); font-size:10.5px}
+
+  /* ---------------- 控制区 ---------------- */
+  footer{
+    flex:none; border-top:1px solid var(--border); background:rgba(11,16,24,.62);
+    display:grid; grid-template-columns:326px 1fr; gap:16px; padding:11px 18px 13px;
+  }
+  .panel-title{font-size:10.5px; color:var(--muted2); letter-spacing:1.4px; text-transform:uppercase; margin-bottom:8px}
+  button{
+    font-family:inherit; font-size:12.5px; color:var(--text);
+    background:var(--card); border:1px solid var(--border2); border-radius:9px;
+    padding:6px 11px; cursor:pointer; transition:.15s; white-space:nowrap;
+  }
+  button:hover{border-color:var(--accent); background:#1a2637}
+  button:active{transform:translateY(1px)}
+  button.primary{background:linear-gradient(180deg,#1d4ed8,#1e40af); border-color:#2563eb; font-weight:600}
+  button.primary:hover{filter:brightness(1.1)}
+  .presets .pills{display:flex; flex-wrap:wrap; gap:7px}
+  .presets .pill{font-size:12px; padding:6px 10px}
+  .presets .pill.active{border-color:var(--accent); color:#cfe6ff; background:#17263a}
+  .presets .demo-row{margin-top:9px; display:flex; gap:7px; align-items:center; flex-wrap:wrap}
+  .presets .demo-row .hint{font-size:10.5px; color:var(--muted2); margin-left:2px}
+  .sliders{display:grid; grid-template-columns:repeat(auto-fill,minmax(228px,1fr)); gap:7px 18px; align-content:start}
+  .slider{display:flex; flex-direction:column; gap:2px}
+  .slider-head{display:flex; align-items:center; gap:8px}
+  .slider-head label{font-size:12px; color:var(--muted); flex:none; display:flex; align-items:center; gap:6px}
+  .slider-head label .tg{font-size:9.5px; font-weight:700; padding:1px 5px; border-radius:4px; color:#fff}
+  .tg.p{background:var(--p)} .tg.i{background:var(--i)} .tg.d{background:var(--d)}
+  .slider-head .snum{
+    width:76px; background:var(--card2); border:1px solid var(--border2); border-radius:6px;
+    color:var(--text); font-family:var(--mono); font-size:12px; padding:3px 6px; text-align:right;
+  }
+  .slider-head .snum:focus{outline:none; border-color:var(--accent)}
+  .slider-head .unit{font-size:10.5px; color:var(--muted2); width:38px}
+  input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:20px; background:transparent; cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:5px; border-radius:3px; background:#0a1119; border:1px solid var(--border2)}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:15px; height:15px; border-radius:50%; margin-top:-6px;
+    background:#fff; border:3px solid var(--accent); box-shadow:0 0 8px rgba(77,171,247,.6); transition:.1s;
+  }
+  input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.12)}
+  input[type=range]::-moz-range-track{height:5px; border-radius:3px; background:#0a1119; border:1px solid var(--border2)}
+  input[type=range]::-moz-range-thumb{width:12px; height:12px; border-radius:50%; background:#fff; border:3px solid var(--accent)}
+
+  /* 讲解条 */
+  .explain{
+    flex:none; border-top:1px solid var(--border); background:rgba(11,16,24,.5);
+    padding:10px 18px 12px; font-size:13px; line-height:1.62;
+    display:grid; grid-template-columns:1.6fr 1fr; gap:18px; max-height:150px; overflow:auto;
+  }
+  .explain b{color:var(--tp)}
+  .explain .ref{color:var(--accent); font-size:11.5px; margin-top:3px}
+  .explain .signbox{border-left:2px solid var(--border2); padding-left:12px; color:var(--muted); font-size:12px; line-height:1.6}
+  .explain .signbox b{color:var(--d)}
+  .explain .signbox .mono{font-family:var(--mono); color:var(--text)}
+
+  @media (max-width:1080px){
+    body{overflow:auto; height:auto}
+    main{grid-template-columns:1fr; grid-template-rows:minmax(360px,46vh) minmax(440px,58vh)}
+    footer{grid-template-columns:1fr}
+    .explain{grid-template-columns:1fr; max-height:none}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1><span class="dot"></span>四轴飞行器 PID 姿态控制</h1>
+    <div class="sub">俯仰角 θ 单轴模型　|　P 看现在 · I 看过去 · D 看未来</div>
+  </div>
+  <div class="formula">
+    <b>M(t)</b> = <span class="cp"><b>Kp</b></span>·e(t) + <span class="ci"><b>Ki</b></span>·∫<sub>0</sub><sup>t</sup>e dτ + <span class="cd"><b>Kd</b></span>·de/dt
+    &nbsp;&nbsp;<span class="tag">e = θ₀ − θ，&nbsp; I·θ̈ = M（取 I=1 归一化）</span>
+  </div>
+  <div class="badge" id="badge">--</div>
+  <div class="actions">
+    <button id="playBtn" class="primary">⏸ 暂停</button>
+    <button id="resetBtn">↺ 重置</button>
+  </div>
+</header>
+
+<main>
+  <section class="card scene-card">
+    <div class="card-head">
+      <span class="sw" style="background:var(--tp)"></span><span class="tt">姿态仿真（侧视）</span>
+      <span class="hint">前/后升力差 → 产生纠正力矩 M</span>
+    </div>
+    <div class="scene-wrap">
+      <canvas id="scene"></canvas>
+      <div class="caption" id="caption"></div>
+    </div>
+    <div class="scene-foot">
+      <div class="readout">
+        <div class="chip"><span class="k">姿态角 θ</span><span class="v" id="rv-theta" style="color:var(--tp)">0.0 <small>°</small></span></div>
+        <div class="chip"><span class="k">误差 e = θ₀−θ</span><span class="v" id="rv-e" style="color:var(--te)">0.0 <small>°</small></span></div>
+        <div class="chip"><span class="k">角速度 ω = θ̇</span><span class="v" id="rv-w" style="color:var(--tv)">0.0 <small>°/s</small></span></div>
+        <div class="chip"><span class="k">角加速度 α = θ̈</span><span class="v" id="rv-a" style="color:var(--ta)">0.0 <small>°/s²</small></span></div>
+        <div class="chip"><span class="k">积分 ∫e dτ</span><span class="v" id="rv-I" style="color:var(--i)">0.0 <small>°·s</small></span></div>
+      </div>
+      <div class="pbars">
+        <div class="pbar"><span class="nm">P = Kp·e</span><div class="track"><div class="fill p" id="fill-p"></div></div><span class="val" id="val-p">0</span></div>
+        <div class="pbar"><span class="nm">I = Ki·∫e</span><div class="track"><div class="fill i" id="fill-i"></div></div><span class="val" id="val-i">0</span></div>
+        <div class="pbar"><span class="nm">D = −Kd·ω</span><div class="track"><div class="fill d" id="fill-d"></div></div><span class="val" id="val-d">0</span></div>
+        <div class="pbar"><span class="nm">M_bias 扰动</span><div class="track"><div class="fill dist" id="fill-dist"></div></div><span class="val" id="val-dist">0</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card charts-card">
+    <div class="card-head">
+      <span class="sw" style="background:var(--accent)"></span><span class="tt">四条曲线：θ(t) · e(t) · ω(t) · α(t)</span>
+      <span class="hint" id="ghost-info">时间窗 10s　·　点击「记录曲线」可叠加对比不同 Kd</span>
+    </div>
+    <div class="charts-grid">
+      <div class="chart"><div class="legend"><span class="sw" style="background:var(--tp)"></span>角度 θ(t)<em>°</em></div><canvas id="c-theta"></canvas></div>
+      <div class="chart"><div class="legend"><span class="sw" style="background:var(--te)"></span>误差 e(t)<em>°</em></div><canvas id="c-e"></canvas></div>
+      <div class="chart"><div class="legend"><span class="sw" style="background:var(--tv)"></span>角速度 ω(t)<em>°/s</em></div><canvas id="c-w"></canvas></div>
+      <div class="chart"><div class="legend"><span class="sw" style="background:var(--ta)"></span>角加速度 α(t)<em>°/s²</em></div><canvas id="c-a"></canvas></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="presets">
+    <div class="panel-title">预设剧情 · 点击跳转（对应笔记两个「演示」点）</div>
+    <div class="pills" id="pills"></div>
+    <div class="demo-row">
+      <button id="demoBtn" class="primary">▶ 自动演示全过程</button>
+      <button id="prevBtn">◀</button>
+      <button id="nextBtn">▶</button>
+      <button id="snapBtn">📸 记录曲线</button>
+      <button id="clearBtn">🧹 清空叠加</button>
+      <span class="hint">空格=暂停 · R=重置 · S=记录</span>
+    </div>
+  </div>
+  <div class="sliders" id="sliders"></div>
+</footer>
+
+<section class="explain">
+  <div id="explain-main"></div>
+  <div class="signbox">
+    <b>为什么 Kp 取正、Kd 取负？</b><br>
+    因为 <span class="mono">de/dt = d(θ₀−θ)/dt = −ω</span>，所以
+    <span class="mono">M = Kp·e − Kd·ω = Kp·e + Kd·(de/dt)</span>。
+    P 项与偏差 e 同号（把它往目标推），D 项与角速度 ω 反号（踩刹车），
+    写成关于 e 的形式时两项都是正号，这正是经典 PID 的标准形。
+  </div>
+</section>
+
+<script>
+(() => {
+  'use strict';
+
+  const $ = id => document.getElementById(id);
+  const D2R = Math.PI / 180;
+
+  /* ================= 常量 ================= */
+  const WINDOW = 10;            // 横轴可见时间窗 (s)
+  const PHYS_DT = 1 / 480;      // 物理积分步长
+  const SAMPLE_DT = 1 / 120;    // 曲线采样周期
+  const MAXLEN = 9000;
+  const I_CLAMP = 4000, W_CLAMP = 4000, TH_CLAMP = 1e5;
+
+  /* ================= 状态 ================= */
+  const S = {
+    theta:0, omega:0, Iacc:0, alpha:0, t:0, e:0, M:0,
+    P:0, It:0, Dt:0,
+    Kp:9, Kd:0, Ki:0, theta0:0, A0:20, Mdist:0, speed:1,
+    running:true, showEnv:true, sampleAcc:0
+  };
+  const hist = { t:[], theta:[], e:[], omega:[], alpha:[] };
+  const ghosts = [];
+
+  /* ================= DOM ================= */
+  const sceneCanvas = $('scene');
+  const chartCanvas = {
+    theta: $('c-theta'), e: $('c-e'), omega: $('c-w'), alpha: $('c-a')
+  };
+
+  /* ================= Canvas 表面（DPR 自适应） ================= */
+  function surface(canvas){
+    let s = canvas._surf;
+    const r = canvas.getBoundingClientRect();
+    const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+    const dpr = window.devicePixelRatio || 1;
+    if(!s || s.w !== w || s.h !== h || s.dpr !== dpr){
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      s = canvas._surf = { ctx: canvas.getContext('2d'), w, h, dpr };
+    }
+    s.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return s;
+  }
+
+  const clamp = (v,a,b) => v < a ? a : (v > b ? b : v);
+  const fmt = (v,d=2) => (isFinite(v) ? v.toFixed(d) : '--');
+
+  /* ================= 派生指标 ================= */
+  function regime(){
+    const Kp = S.Kp;
+    const wn = Math.sqrt(Math.max(Kp, 1e-9));       // ωn = √(Kp/I)
+    const kdCrit = 2 * wn;                          // 临界阻尼所需 Kd
+    let zeta;
+    if (S.Kd === 0) zeta = 0;
+    else zeta = S.Kd / (2 * wn);
+    let name, color;
+    if (S.Kd === 0){ name = '无阻尼 · 纯 P'; color = '#ff6b6b'; }
+    else if (zeta < 0.999){ name = '欠阻尼 (ζ<1)'; color = '#ffd166'; }
+    else if (zeta <= 1.001){ name = '临界阻尼 (ζ=1)'; color = '#69db7c'; }
+    else { name = '过阻尼 (ζ>1)'; color = '#4dabf7'; }
+    return { wn, kdCrit, zeta, name, color };
+  }
+
+  /* ================= 滑杆 ================= */
+  const PARAMS = [
+    {key:'Kp',     label:'Kp 比例',    tag:'p', min:0.5, max:25, step:0.1,  dec:1, unit:''},
+    {key:'Kd',     label:'Kd 微分',    tag:'d', min:0,   max:20, step:0.1,  dec:1, unit:''},
+    {key:'Ki',     label:'Ki 积分',    tag:'i', min:0,   max:6,  step:0.05, dec:2, unit:''},
+    {key:'theta0', label:'目标角 θ₀',  tag:'',  min:-30, max:30, step:0.5,  dec:1, unit:'°'},
+    {key:'A0',     label:'初始偏差 A', tag:'',  min:0,   max:40, step:0.5,  dec:1, unit:'°'},
+    {key:'Mdist',  label:'恒定扰动',   tag:'',  min:-80, max:80, step:1,    dec:0, unit:'°/s²'},
+    {key:'speed',  label:'模拟速度',   tag:'',  min:0.25,max:2,  step:0.05, dec:2, unit:'×'}
+  ];
+  const sliderEls = {};
+  const slidersBox = $('sliders');
+  for(const p of PARAMS){
+    const wrap = document.createElement('div');
+    wrap.className = 'slider';
+    const tg = p.tag ? `<span class="tg ${p.tag}">${p.tag.toUpperCase()}</span>` : '';
+    wrap.innerHTML =
+      `<div class="slider-head"><label>${tg}${p.label}</label>` +
+      `<input class="snum" type="number" step="${p.step}" min="${p.min}" max="${p.max}" value="${S[p.key]}">` +
+      `<span class="unit">${p.unit}</span></div>` +
+      `<input class="srange" type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${S[p.key]}">`;
+    const range = wrap.querySelector('.srange');
+    const num = wrap.querySelector('.snum');
+    let lock = false;
+    const onVal = v => {
+      v = clamp(v, p.min, p.max);
+      num.value = v.toFixed(p.dec);
+      range.value = v;
+      S[p.key] = v;
+      if(p.key === 'A0') reset();       // 初始条件改变 → 重新开始
+    };
+    range.addEventListener('input', () => {
+      if(lock) return; lock = true;
+      onVal(parseFloat(range.value)); lock = false;
+    });
+    num.addEventListener('input', () => {
+      if(lock) return; lock = true;
+      let v = parseFloat(num.value);
+      if(!isFinite(v)) v = S[p.key];
+      onVal(v); lock = false;
+    });
+    sliderEls[p.key] = { range, num };
+    slidersBox.appendChild(wrap);
+  }
+  function syncSliders(){
+    for(const p of PARAMS){
+      sliderEls[p.key].range.value = S[p.key];
+      sliderEls[p.key].num.value = S[p.key].toFixed(p.dec);
+    }
+  }
+
+  /* ================= 预设剧情 ================= */
+  const PRESETS = [
+    { name:'① 纯 P',       dur:8200,
+      set:{Kp:9, Kd:0,  Ki:0, theta0:0, A0:20, Mdist:0},
+      cap:'纯 P 只按“现在”的偏差出力 → 力矩方向永不反向，冲过目标也不刹车，做<b>等幅简谐振荡</b>，永不停息。这正是笔记第 1 节的 θ(t)=θ₀+A·cos(ωt)。' },
+    { name:'② PD 欠阻尼',  dur:8200,
+      set:{Kp:9, Kd:2,  Ki:0, theta0:0, A0:20, Mdist:0},
+      cap:'加入 D（微分）= 提前刹车。Kd 偏小 → 动能没吸干净，仍会<b>过冲、来回摆动几次</b>，振幅按 e^(−ζωn t) 的包络等比衰减。右侧四条曲线 θ(t)/e(t)/ω(t)/α(t) 就是笔记那张四宫格图的角量版本，拖动 Kd 看它们怎么变。' },
+    { name:'③ PD 临界',    dur:7000,
+      set:{Kp:9, Kd:6,  Ki:0, theta0:0, A0:20, Mdist:0},
+      cap:'Kd 恰好 = 2√(Kp·I) → <b>临界阻尼</b>，一次把动能吸干：<b>无过冲、无振荡、最快</b>回到目标。解析解 θ(t)=θ₀+A(1+γt)e^(−γt)（γ=Kd/2I），正是那张四宫格参考图。' },
+    { name:'④ PD 过阻尼',  dur:8200,
+      set:{Kp:9, Kd:15, Ki:0, theta0:0, A0:20, Mdist:0},
+      cap:'Kd 过大 → 稍有一点角速度就被巨大 D 项刹住，像陷进蜂蜜，<b>缓慢爬回</b>目标，响应迟钝。' },
+    { name:'⑤ PD + 扰动',  dur:9000,
+      set:{Kp:9, Kd:6,  Ki:0, theta0:0, A0:20, Mdist:45},
+      cap:'存在恒定外力矩（重心偏移 / 单向侧风）时，PD 稳定后必须靠 <b>残余偏角</b>产生 P 力矩去抵消它 → <b>稳态误差 e = M_bias / Kp</b>，永远消不掉。' },
+    { name:'⑥ PID 消静差', dur:11500,
+      set:{Kp:9, Kd:6,  Ki:4, theta0:0, A0:20, Mdist:45},
+      cap:'加上 I（积分）：只要还有一点误差，积分就持续累加出力，最终积分项<b>单独顶住 M_bias</b>，误差归零（e→∞ = 0）。' }
+  ];
+
+  const pillsBox = $('pills');
+  PRESETS.forEach((d,i) => {
+    const b = document.createElement('button');
+    b.className = 'pill';
+    b.textContent = d.name;
+    b.addEventListener('click', () => { stopDemo(); applySet(d.set); reset(); markPill(i); showCap(i); });
+    pillsBox.appendChild(b);
+  });
+  function markPill(i){
+    [...pillsBox.children].forEach((el,j) => el.classList.toggle('active', j === i));
+  }
+  function applySet(obj){ for(const k in obj) S[k] = obj[k]; syncSliders(); }
+
+  const captionEl = $('caption');
+  function showCap(i){
+    if(i < 0){ captionEl.style.display = 'none'; return; }
+    captionEl.style.display = 'block';
+    captionEl.innerHTML = `<span class="stage">阶段 ${i+1}/${PRESETS.length} · ${PRESETS[i].name}</span>${PRESETS[i].cap}`;
+  }
+
+  /* 自动演示 */
+  const demo = { active:false, idx:-1, start:0 };
+  function applyStage(i){
+    demo.idx = i; demo.start = performance.now();
+    applySet(PRESETS[i].set); reset(); markPill(i); showCap(i);
+  }
+  function startDemo(){ demo.active = true; applyStage(0); $('demoBtn').textContent = '■ 停止演示'; }
+  function stopDemo(){
+    if(!demo.active && demo.idx < 0){ captionEl.style.display = 'none'; return; }
+    demo.active = false;
+    $('demoBtn').textContent = '▶ 自动演示全过程';
+    markPill(-1); showCap(-1);
+  }
+  function tickDemo(now){
+    if(!demo.active) return;
+    if(now - demo.start >= PRESETS[demo.idx].dur){
+      if(demo.idx + 1 < PRESETS.length) applyStage(demo.idx + 1);
+      else { demo.active = false; $('demoBtn').textContent = '▶ 自动演示全过程'; }
+    }
+  }
+  $('demoBtn').addEventListener('click', () => demo.active ? stopDemo() : startDemo());
+  $('prevBtn').addEventListener('click', () => {
+    const i = clamp((demo.idx < 0 ? 0 : demo.idx) - 1, 0, PRESETS.length - 1);
+    demo.active = false; $('demoBtn').textContent = '▶ 自动演示全过程';
+    applySet(PRESETS[i].set); reset(); markPill(i); showCap(i);
+  });
+  $('nextBtn').addEventListener('click', () => {
+    const i = clamp((demo.idx < 0 ? -1 : demo.idx) + 1, 0, PRESETS.length - 1);
+    demo.active = false; $('demoBtn').textContent = '▶ 自动演示全过程';
+    applySet(PRESETS[i].set); reset(); markPill(i); showCap(i);
+  });
+
+  /* ================= 仿真 ================= */
+  function reset(){
+    S.t = 0; S.sampleAcc = 0;
+    S.theta = S.theta0 + S.A0;
+    S.omega = 0; S.Iacc = 0;
+    S.e = S.theta0 - S.theta;
+    S.P = S.Kp * S.e; S.It = 0; S.Dt = 0;
+    S.M = S.P + S.Mdist; S.alpha = S.M;
+    hist.t.length = 0; hist.theta.length = 0; hist.e.length = 0;
+    hist.omega.length = 0; hist.alpha.length = 0;
+    S.running = true; $('playBtn') && ($('playBtn').textContent = '⏸ 暂停');
+  }
+
+  function substep(dt){
+    const e = S.theta0 - S.theta;
+    S.Iacc = clamp(S.Iacc + e * dt, -I_CLAMP, I_CLAMP);
+    const P  = S.Kp * e;
+    const It = S.Ki * S.Iacc;
+    const Dt = -S.Kd * S.omega;               // = Kd · de/dt
+    const M  = P + It + Dt + S.Mdist;
+    const alpha = M;                          // I = 1
+    S.omega += alpha * dt;                    // 半隐式（辛）欧拉，振荡不漂移
+    S.theta += S.omega * dt;
+    S.omega = clamp(S.omega, -W_CLAMP, W_CLAMP);
+    S.theta = clamp(S.theta, -TH_CLAMP, TH_CLAMP);
+    S.t += dt;
+    S.e = e; S.P = P; S.It = It; S.Dt = Dt; S.M = M; S.alpha = alpha;
+  }
+  function recordSample(){
+    hist.t.push(S.t);
+    hist.theta.push(S.theta);
+    hist.e.push(S.theta0 - S.theta);
+    hist.omega.push(S.omega);
+    hist.alpha.push(S.alpha);
+    if(hist.t.length > MAXLEN){
+      hist.t.shift(); hist.theta.shift(); hist.e.shift(); hist.omega.shift(); hist.alpha.shift();
+    }
+  }
+  function advance(realDt){
+    let sim = realDt * S.speed, guard = 0;
+    while(sim > 1e-9 && guard++ < 8000){
+      const dt = Math.min(PHYS_DT, sim);
+      substep(dt);
+      sim -= dt;
+      S.sampleAcc += dt;
+      if(S.sampleAcc >= SAMPLE_DT){ S.sampleAcc -= SAMPLE_DT; recordSample(); }
+    }
+  }
+
+  function snapshot(){
+    if(hist.t.length < 4) return;
+    ghosts.push({
+      t: hist.t.slice(), theta: hist.theta.slice(), e: hist.e.slice(),
+      omega: hist.omega.slice(), alpha: hist.alpha.slice(),
+      label: 'Kd=' + S.Kd.toFixed(1) + ' ζ=' + regime().zeta.toFixed(2)
+    });
+    if(ghosts.length > 6) ghosts.shift();
+    reset();
+    updateGhostInfo();
+  }
+  function updateGhostInfo(){
+    const info = $('ghost-info');
+    if(!ghosts.length){ info.textContent = '时间窗 10s　·　点击「记录曲线」可叠加对比不同 Kd'; return; }
+    info.textContent = '叠加对比：' + ghosts.map(g => g.label).join('　|　');
+  }
+
+  /* ================= 场景绘制 ================= */
+  function arrowFrom(ctx, x0, y0, ux, uy, len, color, width){
+    if(Math.abs(len) < 0.6) return;
+    const dir = Math.sign(len), L = Math.abs(len);
+    const x1 = x0 + ux * L * dir, y1 = y0 + uy * L * dir;
+    ctx.strokeStyle = color; ctx.fillStyle = color;
+    ctx.lineWidth = width || 2.4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    const hs = 9, hw = 4.6;
+    const nx = x1 - ux * dir * hs, ny = y1 - uy * dir * hs;
+    const px = -uy, py = ux;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(nx + px*hw, ny + py*hw);
+    ctx.lineTo(nx - px*hw, ny - py*hw);
+    ctx.closePath(); ctx.fill();
+  }
+  function torqueArc(ctx, cx, cy, r, mag, color){
+    if(Math.abs(mag) < 0.6) return;
+    const span = clamp(Math.abs(mag) / 55, 0.16, 1.35) * (Math.PI / 2) * Math.sign(mag);
+    const start = -Math.PI / 2 - span / 2;
+    const end = start + span;
+    const anti = span < 0;
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2.6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(cx, cy, r, start, end, anti); ctx.stroke();
+    const ex = cx + r * Math.cos(end), ey = cy + r * Math.sin(end);
+    const tx = anti ? Math.sin(end) : -Math.sin(end);
+    const ty = anti ? -Math.cos(end) : Math.cos(end);
+    const hs = 9, hw = 5;
+    const bx = ex - tx * hs, by = ey - ty * hs;
+    const px = -ty, py = tx;
+    ctx.beginPath();
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(bx + px*hw, by + py*hw);
+    ctx.lineTo(bx - px*hw, by - py*hw);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function drawScene(){
+    const s = surface(sceneCanvas); const { ctx, w, h } = s;
+    ctx.clearRect(0, 0, w, h);
+
+    const cx = w * 0.5, cy = h * 0.55;
+    const arm = Math.min(w * 0.30, h * 0.34, 165);
+    const th = S.theta * D2R, th0 = S.theta0 * D2R;
+    const cosT = Math.cos(th), sinT = Math.sin(th);
+    const cos0 = Math.cos(th0), sin0 = Math.sin(th0);
+
+    // 背景网格
+    ctx.strokeStyle = 'rgba(255,255,255,.032)'; ctx.lineWidth = 1;
+    for(let gx = 30; gx < w; gx += 46){ ctx.beginPath(); ctx.moveTo(gx, 8); ctx.lineTo(gx, h - 8); ctx.stroke(); }
+    for(let gy = 20; gy < h; gy += 40){ ctx.beginPath(); ctx.moveTo(8, gy); ctx.lineTo(w - 8, gy); ctx.stroke(); }
+
+    // 目标姿态参考线（θ0，绿色虚线）
+    const rl = Math.min(w * 0.47, 320);
+    ctx.save();
+    ctx.setLineDash([8, 6]); ctx.strokeStyle = 'rgba(105,219,124,.6)'; ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(cx - rl * cos0, cy + rl * sin0);
+    ctx.lineTo(cx + rl * cos0, cy - rl * sin0);
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = '#69db7c'; ctx.font = '600 11.5px system-ui'; ctx.textAlign = 'left';
+    ctx.fillText('目标姿态 θ₀ = ' + S.theta0.toFixed(1) + '°', cx + rl * cos0 - 118, cy - rl * sin0 - 8);
+
+    // 起始偏角（从 θ0 到 θ 的角弧）
+    {
+      const ar = arm * 0.42;
+      const a0 = -th0, a1 = -th;
+      ctx.strokeStyle = 'rgba(255,209,102,.85)'; ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.arc(cx, cy, ar, Math.min(a0, a1), Math.max(a0, a1)); ctx.stroke();
+      const mid = (a0 + a1) / 2;
+      if(Math.abs(S.theta - S.theta0) > 0.3){
+        ctx.fillStyle = '#ffd166'; ctx.font = '600 12px ' + getComputedStyle(document.body).fontFamily;
+        ctx.textAlign = 'center';
+        ctx.fillText('θ = ' + S.theta.toFixed(1) + '°', cx + (ar + 22) * Math.cos(mid), cy + (ar + 22) * Math.sin(mid) + 4);
+      }
+    }
+
+    // 纠正力矩弧形箭头（在机身下方，先画）
+    torqueArc(ctx, cx, cy, arm * 0.66, S.M, 'rgba(255,171,64,.9)');
+    ctx.fillStyle = '#ffab40'; ctx.font = '600 11px ' + getComputedStyle(document.body).fontFamily;
+    ctx.textAlign = 'center';
+    ctx.fillText('纠正力矩 M = ' + fmt(S.M, 0), cx, cy + arm * 0.66 + 30);
+
+    // 机身（侧视）
+    const nx = cx + arm * cosT, ny = cy - arm * sinT;   // 机头（前）
+    const bx = cx - arm * cosT, by = cy + arm * sinT;   // 机尾（后）
+    const ux = -sinT, uy = -cosT;                        // 机身上方（升力方向）
+
+    ctx.strokeStyle = '#cfd8e3'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(nx, ny); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(nx, ny); ctx.stroke();
+
+    // 两个电机 + 螺旋桨
+    function motor(px, py){
+      ctx.fillStyle = '#1b2534'; ctx.strokeStyle = '#8794a5'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(px, py, 8.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+    motor(nx, ny); motor(bx, by);
+
+    // 升力箭头（前后差速 → 力矩）
+    const base = Math.min(arm * 0.5, 62);
+    const dl = clamp(S.M / 55, -0.9, 0.9) * base;
+    const fFront = base + dl, fBack = base - dl;
+    arrowFrom(ctx, nx, ny, ux, uy, fFront, '#ffd166', 3);
+    arrowFrom(ctx, bx, by, ux, uy, fBack, '#ffd166', 3);
+
+    // 电机/升力标签
+    ctx.font = '600 11px system-ui'; ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(180,195,215,.9)';
+    ctx.fillText('前 (机头)', nx + ux * (fFront + 20), ny + uy * (fFront + 20) + 4);
+    ctx.fillText('后 (机尾)', bx + ux * (fBack + 20), by + uy * (fBack + 20) + 4);
+    ctx.fillStyle = '#ffd166'; ctx.font = '10.5px ' + getComputedStyle(document.body).fontFamily;
+    ctx.fillText(fmt(fFront, 0), nx + ux * (fFront + 8) + 16, ny + uy * (fFront + 8));
+    ctx.fillText(fmt(fBack, 0), bx + ux * (fBack + 8) - 16, by + uy * (fBack + 8));
+
+    // 转轴
+    ctx.fillStyle = '#3a4a5e'; ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.beginPath(); ctx.arc(cx, cy, 2.4, 0, Math.PI * 2); ctx.fill();
+
+    // 左上角说明
+    ctx.textAlign = 'left'; ctx.font = '11.5px system-ui'; ctx.fillStyle = 'rgba(138,154,173,.95)';
+    ctx.fillText('升力差 = 前后推力之差 → 就是「纠正力矩 M」', 12, h - 13);
+    // 角度小字（右下）
+    ctx.textAlign = 'right'; ctx.font = '10.5px ' + getComputedStyle(document.body).fontFamily;
+    ctx.fillStyle = 'rgba(138,154,173,.8)';
+    ctx.fillText('t = ' + S.t.toFixed(2) + ' s', w - 12, h - 13);
+  }
+
+  /* ================= 图表绘制 ================= */
+  function lowerBound(arr, t){
+    let lo = 0, hi = arr.length;
+    while(lo < hi){ const mid = (lo + hi) >> 1; if(arr[mid] < t) lo = mid + 1; else hi = mid; }
+    return lo;
+  }
+
+  function drawChart(canvas, arr, color, refVal, opt){
+    opt = opt || {};
+    const s = surface(canvas); const { ctx, w, h } = s;
+    ctx.clearRect(0, 0, w, h);
+
+    const padL = 46, padR = 16, padT = 12, padB = 16;
+    const pw = w - padL - padR, ph = h - padT - padB;
+    if(pw < 12 || ph < 12) return;
+
+    const winEnd = Math.max(S.t, WINDOW);
+    const winStart = winEnd - WINDOW;
+
+    // 可见区间 y 范围
+    let mn = Infinity, mx = -Infinity;
+    const i0 = lowerBound(hist.t, winStart);
+    for(let i = i0; i < arr.length; i++){
+      if(hist.t[i] > winEnd) break;
+      const v = arr[i]; if(v < mn) mn = v; if(v > mx) mx = v;
+    }
+    if(refVal !== null && refVal !== undefined){ if(refVal < mn) mn = refVal; if(refVal > mx) mx = refVal; }
+    if(!isFinite(mn)){ mn = -1; mx = 1; }
+    if(mx - mn < 1e-6){ mn -= 1; mx += 1; }
+    const pad = (mx - mn) * 0.14; mn -= pad; mx += pad;
+
+    const yOf = v => padT + ph * (1 - (v - mn) / (mx - mn));
+    const xOf = t => padL + pw * (t - winStart) / (winEnd - winStart);
+
+    // 网格 + y 刻度
+    ctx.font = '9.5px ' + getComputedStyle(document.body).fontFamily;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for(let g = 0; g <= 4; g++){
+      const val = mx - (mx - mn) * g / 4;
+      const gy = padT + ph * g / 4;
+      ctx.strokeStyle = g === 2 ? 'rgba(255,255,255,.10)' : 'rgba(255,255,255,.055)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(w - padR, gy); ctx.stroke();
+      ctx.fillStyle = '#5c6b7d';
+      ctx.fillText(Math.abs(val) >= 100 ? val.toFixed(0) : val.toFixed(1), padL - 6, gy);
+    }
+    ctx.textBaseline = 'alphabetic';
+    // x 刻度
+    ctx.textAlign = 'center'; ctx.fillStyle = '#5c6b7d';
+    for(let k = 0; k <= 5; k++){
+      const t = winStart + (winEnd - winStart) * k / 5;
+      ctx.fillText(t.toFixed(0) + 's', xOf(t), h - 4);
+    }
+
+    // 参考线（θ 图 = 目标角，其余 = 0）
+    if(refVal !== null && refVal !== undefined){
+      const ry = yOf(refVal);
+      ctx.save(); ctx.setLineDash([5, 4]);
+      ctx.strokeStyle = opt.refColor || 'rgba(255,255,255,.3)';
+      ctx.lineWidth = 1.1; ctx.globalAlpha = .75;
+      ctx.beginPath(); ctx.moveTo(padL, ry); ctx.lineTo(w - padR, ry); ctx.stroke();
+      ctx.restore();
+    }
+
+    // 衰减包络（仅 θ 图、欠阻尼、无积分无扰动时）
+    if(opt.envelope){
+      const r = regime();
+      if(S.Kd > 0 && r.zeta < 1 && S.Ki === 0 && Math.abs(S.Mdist) < 1e-9){
+        const d = Math.sqrt(1 - r.zeta * r.zeta);
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,209,102,.42)'; ctx.lineWidth = 1.1; ctx.setLineDash([6, 5]);
+        for(const sgn of [1, -1]){
+          ctx.beginPath();
+          let started = false;
+          for(let i = i0; i < hist.t.length; i++){
+            const t = hist.t[i]; if(t > winEnd) break;
+            if(t < winStart) continue;
+            const env = S.A0 / d * Math.exp(-r.zeta * r.wn * t);
+            const y = yOf(S.theta0 + sgn * env);
+            if(!started){ ctx.moveTo(xOf(t), y); started = true; } else ctx.lineTo(xOf(t), y);
+          }
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+
+    // 叠加曲线（对比不同 Kd）
+    for(const gh of ghosts){
+      const gArr = arr === hist.theta ? gh.theta : arr === hist.e ? gh.e : arr === hist.omega ? gh.omega : gh.alpha;
+      ctx.strokeStyle = 'rgba(255,255,255,.34)'; ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      let started = false;
+      for(let i = 0; i < gh.t.length; i++){
+        const t = gh.t[i]; if(t > winEnd) break; if(t < winStart) continue;
+        const sx = xOf(t), sy = padT + ph * (1 - (gArr[i] - mn) / (mx - mn));
+        if(!started){ ctx.moveTo(sx, sy); started = true; } else ctx.lineTo(sx, sy);
+      }
+      ctx.stroke();
+    }
+
+    // 主曲线
+    ctx.strokeStyle = color; ctx.lineWidth = 2.2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.beginPath();
+    let started = false;
+    for(let i = i0; i < arr.length; i++){
+      const t = hist.t[i]; if(t > winEnd) break;
+      const sx = xOf(t), sy = yOf(arr[i]);
+      if(!started){ ctx.moveTo(sx, sy); started = true; } else ctx.lineTo(sx, sy);
+    }
+    ctx.stroke();
+
+    // 起点圆点（参考图中的标记）
+    if(hist.t.length){
+      const sx = xOf(hist.t[0]);
+      if(sx >= padL - 1){
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(sx, yOf(arr[0]), 3.6, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // 当前值圆点 + 数值
+    if(arr.length){
+      const n = arr.length - 1;
+      const sx = xOf(hist.t[n]), sy = yOf(arr[n]);
+      ctx.fillStyle = color;
+      ctx.shadowColor = color; ctx.shadowBlur = 8;
+      ctx.beginPath(); ctx.arc(sx, sy, 3.4, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.font = '600 11px ' + getComputedStyle(document.body).fontFamily;
+      ctx.textAlign = 'right'; ctx.fillStyle = color;
+      ctx.fillText(fmt(arr[n], 1), w - padR - 2, clamp(sy - 8, padT + 10, h - padB - 2));
+    }
+  }
+
+  /* ================= 读数 / 讲解 ================= */
+  function setBar(fillId, valId, v, maxAbs){
+    const fill = $(fillId);
+    const frac = clamp(Math.abs(v) / maxAbs, 0, 1) * 50;
+    if(v >= 0){ fill.style.left = '50%'; fill.style.width = frac + '%'; }
+    else { fill.style.left = (50 - frac) + '%'; fill.style.width = frac + '%'; }
+    $(valId).textContent = fmt(v, 0);
+  }
+  function updateReadout(){
+    $('rv-theta').innerHTML = S.theta.toFixed(1) + ' <small>°</small>';
+    $('rv-e').innerHTML = (S.theta0 - S.theta).toFixed(1) + ' <small>°</small>';
+    $('rv-w').innerHTML = S.omega.toFixed(1) + ' <small>°/s</small>';
+    $('rv-a').innerHTML = S.alpha.toFixed(1) + ' <small>°/s²</small>';
+    $('rv-I').innerHTML = S.Iacc.toFixed(1) + ' <small>°·s</small>';
+    const maxAbs = Math.max(Math.abs(S.P), Math.abs(S.It), Math.abs(S.Dt), Math.abs(S.Mdist), 1);
+    setBar('fill-p', 'val-p', S.P, maxAbs);
+    setBar('fill-i', 'val-i', S.It, maxAbs);
+    setBar('fill-d', 'val-d', S.Dt, maxAbs);
+    setBar('fill-dist', 'val-dist', S.Mdist, maxAbs);
+  }
+
+  let lastBadge = '';
+  function updateBadge(){
+    const r = regime();
+    const html = `<span style="color:${r.color}">${r.name}</span> <span class="z">ζ=${r.zeta.toFixed(2)}　ωn=√Kp=${r.wn.toFixed(2)}　Kd_临界=${r.kdCrit.toFixed(1)}</span>`;
+    if(html !== lastBadge){ $('badge').innerHTML = html; lastBadge = html; }
+  }
+
+  let lastExplain = '';
+  function updateExplain(){
+    const r = regime();
+    const hasD = S.Kd > 0, hasI = S.Ki > 0, hasDist = Math.abs(S.Mdist) > 1e-9;
+    let text = '', ref = '';
+    if(!hasD && !hasI){
+      text = '当前只有 <b>P（比例）</b>：力矩方向只由偏差 e 的正负决定。飞过目标时 e 反号、力矩才反向，但此刻角速度已经最大，巨大的转动惯性直接把它甩过另一侧 → <b>等幅简谐振荡，永不停息</b>。解析解 θ(t)=θ₀+A·cos(ωt)，ω=√(Kp/I)。拖动 Kp 可改变振荡快慢。';
+      ref = '对应笔记 第 1 节「考虑现在：比例项 P」 → 演示①';
+    } else if(hasD && !hasI && !hasDist){
+      if(r.zeta < 1){
+        text = '<b>欠阻尼 ζ=' + r.zeta.toFixed(2) + ' < 1</b>：D 项 −Kd·ω 提供阻尼、提前刹车，但 Kd 还不够大，动能未被吸净 → 仍会过冲、来回摆动几次；振幅被 <b>e^(−ζωn t) 衰减包络</b>（图中虚线）逐次压小，最终收敛。';
+      } else if(r.zeta <= 1.001){
+        text = '<b>临界阻尼 ζ=1</b>：Kd 恰好 = 2√(Kp·I)。特征方程出现重根，解为 θ(t)=θ₀+A(1+γt)e^(−γt)，<b>没有 sin/cos 项 → 绝不冲过头</b>，且衰减最快。这是调参追求的最佳手感。';
+      } else {
+        text = '<b>过阻尼 ζ=' + r.zeta.toFixed(2) + ' > 1</b>：Kd 过大，慢衰减根 λ₁=α−β→0 主导后半程，稍微有点角速度就被巨大 D 项刹住，<b>像陷进蜂蜜</b>，要很久才爬到目标。';
+      }
+      ref = '对应笔记 第 2 节「D 控制」（欠/临界/过阻尼三种情况）→ 演示②';
+    } else if(hasD && !hasI && hasDist){
+      const ess = -S.Mdist / S.Kp;
+      text = '存在<b>恒定外力矩 M_bias=' + S.Mdist.toFixed(0) + ' °/s²</b>（重心偏了 / 单向侧风）。稳定后 ω=0 → D 项失效，只剩下 P 去顶：<b>Kp·e = −M_bias</b>，所以必然残留一个偏角 e = −M_bias/Kp ≈ <b>' + ess.toFixed(2) + '°</b> 抵消不掉。这就是<b>稳态误差</b>。加大 Kp 能把它压小，但永远归不了零。';
+      ref = '对应笔记 第 3 节「现实困境：PD 控制下的稳态误差」';
+    } else if(hasI){
+      text = '加上 <b>I（积分）</b>：只要还有一点误差，∫e dτ 就一直累加，I 出力持续增大，直到积分项<b>单独承担 M_bias</b>、P 与 D 全部归零、误差 e→0。数学上对闭环方程求导可直接把常数 M_bias 砍成 0，强行保证 e(∞)=0。注意 <b>Ki 太大会积分过冲</b>，可试着调大观察。';
+      ref = '对应笔记 第 3 节「积分项如何从根源上消除稳态误差」 + 第 4 节三维视角总结';
+    } else {
+      text = '调节下方滑块自由组合 P / D / I，观察机身姿态与四条曲线。';
+      ref = '';
+    }
+    const full = '▶ ' + text + (ref ? '<div class="ref">' + ref + '</div>' : '');
+    if(full !== lastExplain){ $('explain-main').innerHTML = full; lastExplain = full; }
+  }
+
+  /* ================= 主循环 ================= */
+  function render(){
+    drawScene();
+    drawChart(chartCanvas.theta, hist.theta, getCss('--tp'), S.theta0, { envelope:true, refColor:'rgba(105,219,124,.75)' });
+    drawChart(chartCanvas.e,     hist.e,     getCss('--te'), 0);
+    drawChart(chartCanvas.omega, hist.omega, getCss('--tv'), 0);
+    drawChart(chartCanvas.alpha, hist.alpha, getCss('--ta'), 0);
+    updateReadout(); updateBadge(); updateExplain();
+  }
+  const cssCache = {};
+  function getCss(v){
+    if(!cssCache[v]) cssCache[v] = getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+    return cssCache[v];
+  }
+
+  let lastNow = performance.now();
+  function frame(now){
+    let real = Math.min(0.05, (now - lastNow) / 1000);
+    lastNow = now;
+    if(S.running) advance(real);
+    tickDemo(now);
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  /* ================= 事件 ================= */
+  const playBtn = $('playBtn');
+  playBtn.addEventListener('click', () => {
+    S.running = !S.running;
+    playBtn.textContent = S.running ? '⏸ 暂停' : '▶ 播放';
+  });
+  $('resetBtn').addEventListener('click', () => { stopDemo(); reset(); });
+  $('snapBtn').addEventListener('click', snapshot);
+  $('clearBtn').addEventListener('click', () => { ghosts.length = 0; reset(); updateGhostInfo(); });
+  window.addEventListener('keydown', e => {
+    if(e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if(e.code === 'Space'){ e.preventDefault(); playBtn.click(); }
+    else if(e.key === 'r' || e.key === 'R'){ stopDemo(); reset(); }
+    else if(e.key === 's' || e.key === 'S'){ snapshot(); }
+    else if(e.key === 'ArrowRight'){ $('nextBtn').click(); }
+    else if(e.key === 'ArrowLeft'){ $('prevBtn').click(); }
+  });
+
+  /* ================= 启动 ================= */
+  syncSliders();
+  reset();
+  updateGhostInfo();
+  requestAnimationFrame(frame);
+
+  // 初始展示「纯 P」剧情，紧扣笔记第一个演示点
+  applySet(PRESETS[0].set); reset(); markPill(0); showCap(0);
+  window.addEventListener('resize', () => { /* surface() 自适应，无需额外处理 */ });
+})();
+</script>
+</body>
+</html>
