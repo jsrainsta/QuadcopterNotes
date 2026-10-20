@@ -291,33 +291,24 @@ $$\theta(t) = \theta_0 + \frac{A}{2\beta} \left[ (\alpha + \beta) e^{-(\alpha - 
 
 - **物理本质**：阻尼过大使得慢衰减项 $e^{-(\alpha - \beta)t}$ 主导过程，飞行器**移动极度缓慢，耗费极长的时间才能爬升回目标角度 $\theta_0$**。
 
-> 为什么物理上会“像陷在浓稠蜂蜜里一样缓慢”？
+> 为什么物理上会降的比较慢？
 
-注意这两个衰减速率：$\lambda_1$ 和 $\lambda_2$。
+注意这两个衰减速率：$(\alpha - \beta)$ 和 $(\alpha + \beta)$。
 
-- $\lambda_2 = \alpha + \sqrt{\dots}$ 很大，导致 $e^{-\lambda_2 t}$ 衰减极快，很快就衰减到 0 了。
+- $(\alpha + \beta) = \alpha + \sqrt{\dots}$ 很大，导致 $e^{-(\alpha + \beta) t}$ 衰减极快，很快就衰减到 0 了。
 
-- **关键看 $\lambda_1$**：$\lambda_1 = \alpha - \sqrt{\left(\frac{K_d}{2I}\right)^2 - \frac{K_p}{I}}$。当 $K_d$ 变得极大时，$\sqrt{\left(\frac{K_d}{2I}\right)^2 - \frac{K_p}{I}} \approx \frac{K_d}{2I} = \alpha$，这使得：
+- 关键看 $(\alpha - \beta)$：$(\alpha - \beta) = \alpha - \sqrt{\left(\frac{K_d}{2I}\right)^2 - \frac{K_p}{I}}$。当 $K_d$ 变得极大时，$\sqrt{\left(\frac{K_d}{2I}\right)^2 - \frac{K_p}{I}} \approx \frac{K_d}{2I} = \alpha$，这使得：
 
-  $$\lambda_1 \to 0$$
+  $$-(\alpha - \beta) \to 0$$
 
-主导系统后半程运动的是 $e^{-\lambda_1 t}$。当指数项的系数 $\lambda_1$ 趋近于 0 时，$e^{-\lambda_1 t}$ 的衰减速度会**变得极其缓慢**！
-
-**物理图像总结**：
-
-阻尼力矩 $M_{damp} = -K_d \dot{\theta}$ 实在太大了。飞行器稍有一点旋转速度，巨大的 D 项就会施加极强的反向制动力。飞行器就像被卡在黏稠的蜂蜜里，P 项（弹簧拉力）费尽九牛二虎之力也拉不动它，导致**系统响应极其迟钝，要耗费极长的时间才能爬升到目标角度**。
-
-
-
-
-
-
+主导系统后半程运动的是 $e^{-(\alpha - \beta) t}$。当指数项的系数 $-(\alpha - \beta)$ 趋近于 0 时，$e^{-(\alpha - \beta) t}$ 的衰减速度会变得极其缓慢
 
 
 
 虽然通过这种方法能根据一个 Kp 求出 Kd，但实际不会采用这种方法计算，原因有二：
 1. 不一定要弄成临界阻尼。
 2. 我们不知道 I，如果测的话，还不如直接测 Pd。
+3. 还没引入 I 控制
 
 
 
@@ -361,7 +352,7 @@ $$M_{bias} = K_p \cdot e(t) \implies e(t) = \frac{M_{bias}}{K_p}$$
 
 因为 $M_{bias} \neq 0$，所以**误差 $e(t)$ 绝对不可能等于 0**！ 这意味着：只要重心是偏的，PD 控制器就必须**强行保留一个偏角（残余误差）**，靠这个残余误差产生的 P 力矩去和重力抵消。这个系统稳定后依然顽固存在的误差，就叫**稳态误差（Steady-State Error）**。   
 
-### 3.2 寻找数学工具：为什么偏偏要用“积分”？
+### 3.2 寻找数学工具：为什么要用“积分”？
 
 现在我们的需求变了：**我们希望在姿态完全回正（$e(t) = 0$）时，控制器依然能输出一个不为 0 的力矩 $M_{bias}$！**
 
