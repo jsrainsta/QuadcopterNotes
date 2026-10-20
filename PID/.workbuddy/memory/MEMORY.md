@@ -16,6 +16,9 @@
 | `pid-demo-2.html` | 1D 位置 + 场景 + 四曲线 + 自动演示 | 位置 x |
 | `pid-attitude-demo.html` | 俯仰角单轴 + 侧视姿态 + 四曲线 + 讲解条 | 姿态角 θ |
 | `pid-3d-demo.html` | **三维四旋翼模型 + 自研 3D 引擎 + 三轴 PID** | 滚转/俯仰/偏航 |
+| `pid-torque-demo.html` | **P/I/D 三项力矩贡献**：叠加曲线 + 占比图 + 瞬时向量分解 | 力矩 M 的分解 |
+| `pid-attitude-torque-demo.html` | **姿态仿真 + 四曲线 + P/I/D 贡献**（`pid-attitude-demo` 的增强副本，原文件未改） | θ + 力矩 |
+| `pid-contribution-demo.html` | 较早的一次尝试（仅三项曲线 + 姿态面板），未删除，待用户决定 | 力矩 M |
 
 ## 硬性约定
 1. **单文件离线 HTML**：不用 CDN / 外部库 / 构建步骤，双击直接打开。

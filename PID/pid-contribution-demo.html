@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PID 三项力矩贡献 · P / I / D 随时间</title>
+<style>
+  :root{
+    --bg:#0b1018; --bg2:#0e1520;
+    --card:#141d2b; --card2:#101823;
+    --border:#23303f; --border2:#2c3c4f;
+    --text:#e9eff6; --muted:#8a9aad; --muted2:#5c6b7d;
+    --accent:#4dabf7;
+    --p:#ff6b6b; --i:#da77f2; --d:#4dabf7; --m:#ffe066;
+    --shadow:0 8px 28px rgba(0,0,0,.4);
+    --mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:system-ui,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--text);
+    background:
+      radial-gradient(1200px 620px at 15% -10%, rgba(77,171,247,.09), transparent 60%),
+      radial-gradient(1000px 620px at 100% 0%, rgba(218,119,242,.08), transparent 55%),
+      linear-gradient(180deg,var(--bg2),var(--bg));
+    height:100vh; overflow:hidden; display:flex; flex-direction:column;
+  }
+
+  /* header */
+  header{
+    flex:none; display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+    padding:10px 18px; border-bottom:1px solid var(--border);
+    background:rgba(11,16,24,.72); backdrop-filter:blur(8px);
+  }
+  .brand{display:flex; flex-direction:column; min-width:250px}
+  .brand h1{font-size:17px; font-weight:650; letter-spacing:.4px; display:flex; align-items:center; gap:8px}
+  .brand h1 .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+  .brand .sub{font-size:11.5px; color:var(--muted); margin-top:3px}
+  .formula{
+    flex:1; min-width:300px; text-align:center;
+    font-family:var(--mono); font-size:14px; color:var(--muted);
+    background:var(--card2); border:1px solid var(--border); border-radius:10px; padding:7px 14px;
+  }
+  .formula b{font-weight:650}
+  .cp{color:var(--p)} .ci{color:var(--i)} .cd{color:var(--d)} .cm{color:var(--m)}
+  .formula .tag{font-size:10.5px; color:var(--muted2)}
+  .badge{flex:none; font-size:12.5px; font-weight:650; padding:7px 13px; border-radius:10px; border:1px solid var(--border2); background:var(--card); white-space:nowrap}
+  .badge .z{font-family:var(--mono); font-weight:500; color:var(--muted); font-size:11.5px}
+  .actions{flex:none; display:flex; gap:7px}
+  .actions .hbtn{
+    font-family:inherit; font-size:12.5px; padding:6px 11px; border-radius:9px; cursor:pointer;
+    background:var(--card); border:1px solid var(--border2); color:var(--text); transition:.15s;
+  }
+  .actions .hbtn:hover{border-color:var(--accent); background:#1a2637}
+  .actions .hbtn:active{transform:translateY(1px)}
+  .actions .hbtn.primary{background:linear-gradient(180deg,#1d4ed8,#1e40af); border-color:#2563eb; font-weight:600; color:#fff}
+
+  /* main */
+  main{
+    flex:1 1 auto; min-height:0; padding:14px 18px;
+    display:grid; grid-template-columns:minmax(0,1fr) 336px; gap:14px;
+  }
+  .card{
+    background:linear-gradient(180deg,var(--card),var(--card2));
+    border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow);
+    display:flex; flex-direction:column; min-height:0; overflow:hidden;
+  }
+  .card-head{
+    flex:none; display:flex; align-items:center; gap:9px; flex-wrap:wrap;
+    padding:9px 14px; border-bottom:1px solid var(--border); font-size:12.5px; color:var(--muted);
+  }
+  .card-head .sw{width:9px;height:9px;border-radius:3px}
+  .card-head .tt{font-weight:600; color:var(--text); font-size:13.5px}
+  .hl{margin-left:auto; display:flex; gap:6px; align-items:center}
+  .hl .lab{font-size:10.5px; color:var(--muted2); margin-right:2px}
+  .hlbtn{
+    font-size:11.5px; padding:4px 10px; border-radius:7px; cursor:pointer;
+    background:var(--card2); border:1px solid var(--border2); color:var(--muted);
+    font-family:inherit; transition:.15s;
+  }
+  .hlbtn:hover{border-color:var(--accent); color:var(--text)}
+  .hlbtn.active{border-color:var(--accent); color:#cfe6ff; background:#17263a}
+
+  .chart-wrap{flex:1 1 auto; min-height:0; position:relative}
+  .chart-wrap canvas{position:absolute; inset:0; width:100%; height:100%; display:block}
+  .caption{
+    flex:none; padding:8px 14px; border-bottom:1px solid var(--border);
+    background:rgba(9,13,20,.45); font-size:12.5px; line-height:1.55; color:var(--text);
+  }
+  .caption .stage{color:var(--accent); font-weight:700; margin-right:8px; font-size:11.5px; letter-spacing:.3px}
+  .caption.hide{display:none}
+
+  /* side */
+  .side-body{flex:1 1 auto; min-height:0; overflow:auto; padding:11px 13px 13px; display:flex; flex-direction:column; gap:11px}
+  .sec-title{font-size:10.5px; color:var(--muted2); letter-spacing:1.3px; text-transform:uppercase}
+  .prev{position:relative; height:132px; background:#0a1017; border:1px solid var(--border); border-radius:10px; overflow:hidden}
+  .prev canvas{position:absolute; inset:0; width:100%; height:100%; display:block}
+  .pbars{display:flex; flex-direction:column; gap:5px}
+  .pbar{display:flex; align-items:center; gap:8px; font-size:11px}
+  .pbar .nm{width:80px; color:var(--muted); flex:none; font-family:var(--mono); font-size:10.5px}
+  .pbar .track{flex:1; height:10px; background:#0a1119; border:1px solid var(--border); border-radius:5px; position:relative; overflow:hidden}
+  .pbar .track::after{content:""; position:absolute; left:50%; top:0; bottom:0; width:1px; background:var(--border2)}
+  .pbar .fill{position:absolute; top:0; bottom:0; border-radius:4px; transition:left .05s linear,width .05s linear}
+  .fill.p{background:linear-gradient(90deg,#b83b3b,#ff6b6b)}
+  .fill.i{background:linear-gradient(90deg,#9c36c0,#da77f2)}
+  .fill.d{background:linear-gradient(90deg,#2b6cb0,#4dabf7)}
+  .fill.m{background:linear-gradient(90deg,#b08a1e,#ffe066)}
+  .pbar .val{width:78px; text-align:right; font-family:var(--mono); font-size:11px; flex:none}
+  .pbar.sum{margin-top:3px; padding-top:6px; border-top:1px dashed var(--border2)}
+  .pbar.sum .nm{color:var(--m); font-weight:700}
+  .readout{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
+  .chip{background:var(--card2); border:1px solid var(--border); border-radius:9px; padding:5px 8px; display:flex; flex-direction:column; gap:1px}
+  .chip .k{font-size:9.5px; color:var(--muted)}
+  .chip .v{font-family:var(--mono); font-size:13.5px; font-weight:600}
+  .chip .v small{font-size:9px; color:var(--muted); font-weight:400}
+
+  /* footer */
+  footer{
+    flex:none; border-top:1px solid var(--border); background:rgba(11,16,24,.62);
+    display:grid; grid-template-columns:330px 1fr; gap:16px; padding:11px 18px 13px;
+  }
+  button{font-family:inherit}
+  .panel-title{font-size:10.5px; color:var(--muted2); letter-spacing:1.4px; text-transform:uppercase; margin-bottom:8px}
+  .presets .pills{display:flex; flex-wrap:wrap; gap:7px}
+  .presets .pill{
+    font-size:12px; padding:6px 10px; border-radius:9px; cursor:pointer;
+    background:var(--card); border:1px solid var(--border2); color:var(--text);
+  }
+  .presets .pill:hover{border-color:var(--accent)}
+  .presets .pill.active{border-color:var(--accent); color:#cfe6ff; background:#17263a}
+  .presets .demo-row{margin-top:9px; display:flex; gap:7px; align-items:center; flex-wrap:wrap}
+  .presets .demo-row .hint{font-size:10.5px; color:var(--muted2)}
+  .presets .demo-row button{
+    font-size:12.5px; padding:6px 11px; border-radius:9px; cursor:pointer;
+    background:var(--card); border:1px solid var(--border2); color:var(--text);
+  }
+  .presets .demo-row button.primary{background:linear-gradient(180deg,#1d4ed8,#1e40af); border-color:#2563eb; font-weight:600}
+  .sliders{display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:6px 16px; align-content:start}
+  .slider{display:flex; flex-direction:column; gap:2px}
+  .slider-head{display:flex; align-items:center; gap:8px}
+  .slider-head label{font-size:11.5px; color:var(--muted); flex:none; display:flex; align-items:center; gap:6px}
+  .slider-head label .tg{font-size:9.5px; font-weight:700; padding:1px 5px; border-radius:4px; color:#0b1018}
+  .tg.p{background:var(--p)} .tg.i{background:var(--i)} .tg.d{background:var(--d)}
+  .slider-head .snum{width:72px; background:var(--card2); border:1px solid var(--border2); border-radius:6px; color:var(--text); font-family:var(--mono); font-size:11.5px; padding:3px 6px; text-align:right}
+  .slider-head .snum:focus{outline:none; border-color:var(--accent)}
+  .slider-head .unit{font-size:10px; color:var(--muted2); width:36px}
+  input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:18px; background:transparent; cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:4px; border-radius:3px; background:#0a1119; border:1px solid var(--border2)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:14px; height:14px; border-radius:50%; margin-top:-6px; background:#fff; border:3px solid var(--accent)}
+  input[type=range]::-moz-range-track{height:4px; border-radius:3px; background:#0a1119; border:1px solid var(--border2)}
+  input[type=range]::-moz-range-thumb{width:11px; height:11px; border-radius:50%; background:#fff; border:3px solid var(--accent)}
+
+  /* explain */
+  .explain{
+    flex:none; border-top:1px solid var(--border); background:rgba(11,16,24,.5);
+    padding:10px 18px 12px; font-size:13px; line-height:1.62;
+    display:grid; grid-template-columns:1.7fr 1fr; gap:18px; max-height:130px; overflow:auto;
+  }
+  .explain b{color:var(--m)}
+  .explain .ref{color:var(--accent); font-size:11.5px; margin-top:3px}
+  .explain .tipbox{border-left:2px solid var(--border2); padding-left:12px; color:var(--muted); font-size:12px; line-height:1.6}
+  .explain .tipbox b{color:var(--accent)}
+  .explain .tipbox .mono{font-family:var(--mono); color:var(--text)}
+
+  @media (max-width:1080px){
+    body{overflow:auto; height:auto}
+    main{grid-template-columns:1fr; grid-template-rows:minmax(380px,52vh) auto}
+    footer{grid-template-columns:1fr}
+    .explain{grid-template-columns:1fr; max-height:none}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1><span class="dot"></span>PID 三项力矩贡献</h1>
+    <div class="sub">P 看现在 · I 看过去 · D 看未来　|　逐时刻拆解 M(t) = P + I + D</div>
+  </div>
+  <div class="formula">
+    <b>M(t)</b> = <span class="cp"><b>P</b></span> + <span class="ci"><b>I</b></span> + <span class="cd"><b>D</b></span>
+    &nbsp;<span class="tag">P = Kp·e　I = Ki·∫e dτ　D = −Kd·ω = Kd·de/dt　（e = θ₀ − θ，I=1）</span>
+  </div>
+  <div class="badge" id="badge">--</div>
+  <div class="actions">
+    <button id="playBtn" class="hbtn primary">⏸ 暂停</button>
+    <button id="resetBtn" class="hbtn">↺ 重置</button>
+  </div>
+</header>
+
+<main>
+  <section class="card chart-card">
+    <div class="card-head">
+      <span class="sw" style="background:var(--m)"></span>
+      <span class="tt">三项贡献随时间变化</span>
+      <div class="hl" id="hlBtns">
+        <span class="lab">突出显示</span>
+      </div>
+    </div>
+    <div class="caption" id="caption"></div>
+    <div class="chart-wrap"><canvas id="big"></canvas></div>
+  </section>
+
+  <section class="card side-card">
+    <div class="card-head"><span class="sw" style="background:var(--p)"></span><span class="tt">姿态与当前出力</span></div>
+    <div class="side-body">
+      <div class="prev"><canvas id="prev"></canvas></div>
+
+      <div>
+        <div class="sec-title" style="margin-bottom:6px">此刻的力矩构成</div>
+        <div class="pbars">
+          <div class="pbar"><span class="nm">P = Kp·e</span><div class="track"><div class="fill p" id="fill-p"></div></div><span class="val" id="val-p">0</span></div>
+          <div class="pbar"><span class="nm">I = Ki·∫e</span><div class="track"><div class="fill i" id="fill-i"></div></div><span class="val" id="val-i">0</span></div>
+          <div class="pbar"><span class="nm">D = −Kd·ω</span><div class="track"><div class="fill d" id="fill-d"></div></div><span class="val" id="val-d">0</span></div>
+          <div class="pbar sum"><span class="nm">Σ M</span><div class="track"><div class="fill m" id="fill-m"></div></div><span class="val" id="val-m">0</span></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="sec-title" style="margin-bottom:6px">状态量</div>
+        <div class="readout">
+          <div class="chip"><span class="k">姿态 θ</span><span class="v" id="rv-th">0.0 <small>°</small></span></div>
+          <div class="chip"><span class="k">误差 e</span><span class="v" id="rv-e">0.0 <small>°</small></span></div>
+          <div class="chip"><span class="k">角速度 ω</span><span class="v" id="rv-w">0.0 <small>°/s</small></span></div>
+          <div class="chip"><span class="k">积分 ∫e</span><span class="v" id="rv-I">0.0 <small>°·s</small></span></div>
+          <div class="chip"><span class="k">扰动 M_bias</span><span class="v" id="rv-bias">0 <small>°/s²</small></span></div>
+          <div class="chip"><span class="k">时间</span><span class="v" id="rv-t">0.0 <small>s</small></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="presets">
+    <div class="panel-title">预设剧情 · 点击跳转</div>
+    <div class="pills" id="pills"></div>
+    <div class="demo-row">
+      <button id="demoBtn" class="primary">▶ 自动演示全过程</button>
+      <button id="prevBtn">◀</button>
+      <button id="nextBtn">▶</button>
+      <span class="hint">空格=暂停 · R=重置</span>
+    </div>
+  </div>
+  <div class="sliders" id="sliders"></div>
+</footer>
+
+<section class="explain">
+  <div id="explain-main"></div>
+  <div class="tipbox">
+    <b>怎么读这张图</b><br>
+    三条彩色曲线是<b>同一时刻</b>三项各自出的大小，金色粗线是它们的和 <span class="mono">M = P + I + D</span>。
+    彩色填充在零线以上表示“往正方向推”、以下表示“往负方向推”；<b>填充面积</b>可以直观看出这一项在整段时间里“出了多少力”。
+    点右上角 <span class="mono">P / I / D</span> 可以把另外两项压暗，单独看某一项。
+  </div>
+</section>
+
+<script>
+(() => {
+  'use strict';
+
+  const $ = id => document.getElementById(id);
+  const D2R = Math.PI / 180;
+  const clamp = (v,a,b) => v < a ? a : (v > b ? b : v);
+  const fmt = (v,d=1) => (isFinite(v) ? v.toFixed(d) : '--');
+  function niceStep(range, target){
+    const raw = range / (target || 5);
+    const mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1e-9))));
+    const n = raw / mag;
+    return (n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10) * mag;
+  }
+  const fmtTick = v => (Math.abs(v) >= 10 ? Math.round(v).toString() : v.toFixed(1));
+
+  /* ============ 常量 ============ */
+  const WINDOW = 10, PHYS_DT = 1/480, SAMPLE_DT = 1/120, MAXLEN = 6000;
+  const I_CLAMP = 4000, W_CLAMP = 4000, A_CLAMP = 1e4;
+  const C_P = '#ff6b6b', C_I = '#da77f2', C_D = '#4dabf7', C_M = '#ffe066';
+
+  /* ============ 状态 ============ */
+  const S = {
+    theta:0, omega:0, Iacc:0, t:0, acc:0,
+    Kp:9, Kd:6, Ki:0, theta0:0, thetaInit:20, Mdist:0, speed:1,
+    running:true, handover:-1,
+    P:0, It:0, Dt:0, M:0, e:0
+  };
+  const hist = { t:[], P:[], I:[], D:[], M:[], th:[], e:[] };
+  let highlight = 'all';
+
+  /* ============ 画布 ============ */
+  function surface(canvas){
+    let s = canvas._surf;
+    const r = canvas.getBoundingClientRect();
+    const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+    const dpr = window.devicePixelRatio || 1;
+    if(!s || s.w !== w || s.h !== h || s.dpr !== dpr){
+      canvas.width = Math.round(w*dpr); canvas.height = Math.round(h*dpr);
+      s = canvas._surf = { ctx: canvas.getContext('2d'), w, h, dpr };
+    }
+    s.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return s;
+  }
+  const bigCanvas = $('big'), prevCanvas = $('prev');
+
+  /* ============ 物理 ============ */
+  function computeNow(){
+    const e = S.theta0 - S.theta;
+    S.P  = S.Kp * e;
+    S.It = S.Ki * S.Iacc;
+    S.Dt = -S.Kd * S.omega;
+    S.M  = S.P + S.It + S.Dt + S.Mdist;
+    S.e  = e;
+  }
+  function reset(){
+    S.t = 0; S.acc = 0;
+    S.theta = S.thetaInit; S.omega = 0; S.Iacc = 0; S.handover = -1;
+    computeNow();
+    hist.t.length = 0; hist.P.length = 0; hist.I.length = 0;
+    hist.D.length = 0; hist.M.length = 0; hist.th.length = 0; hist.e.length = 0;
+    S.running = true;
+    $('playBtn').textContent = '⏸ 暂停';
+  }
+  function substep(dt){
+    const e = S.theta0 - S.theta;
+    S.Iacc = clamp(S.Iacc + e*dt, -I_CLAMP, I_CLAMP);
+    const P = S.Kp*e, It = S.Ki*S.Iacc, Dt = -S.Kd*S.omega;
+    const M = P + It + Dt + S.Mdist;
+    S.omega = clamp(S.omega + M*dt, -W_CLAMP, W_CLAMP);
+    S.theta = clamp(S.theta + S.omega*dt, -A_CLAMP, A_CLAMP);
+    S.t += dt;
+    S.P = P; S.It = It; S.Dt = Dt; S.M = M; S.e = e;
+    if(S.handover < 0 && S.Ki > 0 && Math.abs(It) > Math.abs(P) && Math.abs(It) > 1) S.handover = S.t;
+  }
+  function recordSample(){
+    hist.t.push(S.t); hist.P.push(S.P); hist.I.push(S.It);
+    hist.D.push(S.Dt); hist.M.push(S.M); hist.th.push(S.theta); hist.e.push(S.e);
+    if(hist.t.length > MAXLEN){
+      hist.t.shift(); hist.P.shift(); hist.I.shift();
+      hist.D.shift(); hist.M.shift(); hist.th.shift(); hist.e.shift();
+    }
+  }
+  function advance(realDt){
+    let sim = realDt * S.speed, guard = 0;
+    while(sim > 1e-9 && guard++ < 8000){
+      const dt = Math.min(PHYS_DT, sim);
+      substep(dt); sim -= dt;
+      S.acc += dt;
+      if(S.acc >= SAMPLE_DT){ S.acc -= SAMPLE_DT; recordSample(); }
+    }
+  }
+
+  /* ============ 姿态小预览 ============ */
+  function arrowFrom(ctx, x0,y0, ux,uy, len, color, width){
+    if(Math.abs(len) < 0.6) return;
+    const dir = Math.sign(len), L = Math.abs(len);
+    const x1 = x0 + ux*L*dir, y1 = y0 + uy*L*dir;
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = width || 2.2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+    const hs = 7, hw = 3.6, nx = x1 - ux*dir*hs, ny = y1 - uy*dir*hs, px = -uy, py = ux;
+    ctx.beginPath();
+    ctx.moveTo(x1,y1);
+    ctx.lineTo(nx+px*hw, ny+py*hw);
+    ctx.lineTo(nx-px*hw, ny-py*hw);
+    ctx.closePath(); ctx.fill();
+  }
+  function drawPreview(){
+    const s = surface(prevCanvas); const ctx = s.ctx, W = s.w, H = s.h;
+    ctx.clearRect(0, 0, W, H);
+
+    const cx = W*0.5, cy = H*0.60;
+    const arm = Math.min(W*0.31, H*0.36, 92);
+    const th = S.theta*D2R, th0 = S.theta0*D2R;
+
+    // 目标姿态
+    ctx.save(); ctx.setLineDash([6,5]);
+    ctx.strokeStyle = 'rgba(105,219,124,.5)'; ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(cx - arm*1.35*Math.cos(th0), cy + arm*1.35*Math.sin(th0));
+    ctx.lineTo(cx + arm*1.35*Math.cos(th0), cy - arm*1.35*Math.sin(th0));
+    ctx.stroke(); ctx.restore();
+
+    const nx = cx + arm*Math.cos(th), ny = cy - arm*Math.sin(th);
+    const bx = cx - arm*Math.cos(th), by = cy + arm*Math.sin(th);
+    const ux = -Math.sin(th), uy = -Math.cos(th);
+
+    // 升力（前后差速）
+    const base = Math.min(arm*0.46, 40);
+    const dl = clamp(S.M/60, -0.9, 0.9)*base;
+    arrowFrom(ctx, nx, ny, ux, uy, base+dl, 'rgba(255,209,102,.95)', 2.2);
+    arrowFrom(ctx, bx, by, ux, uy, base-dl, 'rgba(255,209,102,.95)', 2.2);
+
+    // 机身
+    ctx.strokeStyle = '#cfd8e3'; ctx.lineWidth = 4.5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(nx,ny); ctx.stroke();
+    for(const p of [[nx,ny],[bx,by]]){
+      ctx.fillStyle = '#1b2534'; ctx.strokeStyle = '#8794a5'; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(p[0], p[1], 6, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    }
+    // 转轴
+    ctx.fillStyle = '#3a4a5e'; ctx.beginPath(); ctx.arc(cx, cy, 4.2, 0, Math.PI*2); ctx.fill();
+
+    // 文字
+    ctx.font = '600 11px ' + getComputedStyle(document.body).fontFamily;
+    ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(233,239,246,.9)';
+    ctx.fillText('θ = ' + S.theta.toFixed(1) + '°', 8, 15);
+    ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(138,154,173,.85)';
+    ctx.fillText('M = ' + fmt(S.M,0), W-8, 15);
+  }
+
+  /* ============ 主图 ============ */
+  function drawBig(){
+    const s = surface(bigCanvas); const ctx = s.ctx, W = s.w, H = s.h;
+    ctx.clearRect(0, 0, W, H);
+
+    const padL = 62, padR = 20, padT = 54, padB = 30;
+    const pw = W - padL - padR, ph = H - padT - padB;
+    if(pw < 40 || ph < 40) return;
+
+    const winEnd = Math.max(S.t, WINDOW);
+    const winStart = winEnd - WINDOW;
+
+    // y 范围
+    let mn = Infinity, mx = -Infinity;
+    for(let i=0;i<hist.t.length;i++){
+      const t = hist.t[i];
+      if(t < winStart) continue; if(t > winEnd) break;
+      for(const arr of [hist.P, hist.I, hist.D, hist.M]){
+        const v = arr[i]; if(v < mn) mn = v; if(v > mx) mx = v;
+      }
+    }
+    if(!isFinite(mn)){ mn = -1; mx = 1; }
+    mn = Math.min(mn, 0); mx = Math.max(mx, 0);
+    if(mx - mn < 1e-6){ mn -= 1; mx += 1; }
+    const ypad = (mx - mn) * 0.12; mn -= ypad; mx += ypad;
+
+    const xOf = t => padL + pw*(t - winStart)/(winEnd - winStart);
+    const yOf = v => padT + ph*(1 - (v - mn)/(mx - mn));
+    const y0 = yOf(0);
+
+    // 网格 + y 刻度（nice ticks）
+    ctx.lineWidth = 1;
+    ctx.font = '10px ' + getComputedStyle(document.body).fontFamily;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    const ystep = niceStep(mx - mn, 4);
+    for(let v = Math.ceil(mn/ystep)*ystep; v <= mx + 1e-9; v += ystep){
+      if(Math.abs(v) < ystep*1e-6) continue;      // 零线单独画
+      const gy = yOf(v);
+      ctx.strokeStyle = 'rgba(255,255,255,.055)';
+      ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(W-padR, gy); ctx.stroke();
+      ctx.fillStyle = '#5c6b7d';
+      ctx.fillText(fmtTick(v), padL-7, gy);
+    }
+    ctx.textBaseline = 'alphabetic';
+
+    // x 刻度
+    ctx.textAlign = 'center'; ctx.fillStyle = '#5c6b7d';
+    for(let k=0; k<=6; k++){
+      const t = winStart + (winEnd-winStart)*k/6;
+      ctx.fillText(t.toFixed(0) + 's', xOf(t), H-9);
+    }
+
+    // 零线
+    ctx.save(); ctx.setLineDash([5,4]);
+    ctx.strokeStyle = 'rgba(255,255,255,.34)'; ctx.lineWidth = 1.1;
+    ctx.beginPath(); ctx.moveTo(padL, y0); ctx.lineTo(W-padR, y0); ctx.stroke();
+    ctx.restore();
+
+    // 单位
+    ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(138,154,173,.8)';
+    ctx.font = '10px ' + getComputedStyle(document.body).fontFamily;
+    ctx.fillText('力矩 / 角加速度 (°/s²)', padL, padT-8);
+
+    // 收集可见点
+    const series = [
+      { key:'P', arr:hist.P, color:C_P, alpha:1,   fill:'rgba(255,107,107,0.15)' },
+      { key:'I', arr:hist.I, color:C_I, alpha:1,   fill:'rgba(218,119,242,0.16)' },
+      { key:'D', arr:hist.D, color:C_D, alpha:1,   fill:'rgba(77,171,247,0.15)' }
+    ];
+    const pts = { P:[], I:[], D:[], M:[] };
+    for(let i=0;i<hist.t.length;i++){
+      const t = hist.t[i];
+      if(t < winStart) continue; if(t > winEnd) break;
+      const x = xOf(t);
+      pts.P.push([x, yOf(hist.P[i])]);
+      pts.I.push([x, yOf(hist.I[i])]);
+      pts.D.push([x, yOf(hist.D[i])]);
+      pts.M.push([x, yOf(hist.M[i])]);
+    }
+
+    const dim = k => (highlight === 'all' || highlight === k);
+
+    // 填充面积
+    for(const sr of series){
+      const P = pts[sr.key];
+      if(P.length < 2) continue;
+      ctx.beginPath();
+      ctx.moveTo(P[0][0], y0);
+      for(const p of P) ctx.lineTo(p[0], p[1]);
+      ctx.lineTo(P[P.length-1][0], y0);
+      ctx.closePath();
+      ctx.globalAlpha = dim(sr.key) ? 1 : 0.18;
+      ctx.fillStyle = sr.fill;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // 总力矩：先画「光晕 + 芯线」，分项曲线再盖在上面。
+    // 这样某一项恰好等于总和时（例如纯 P），仍能看出红线藏在金色光晕里。
+    if(pts.M.length >= 2){
+      const pathM = () => {
+        ctx.beginPath(); ctx.moveTo(pts.M[0][0], pts.M[0][1]);
+        for(let i=1;i<pts.M.length;i++) ctx.lineTo(pts.M[i][0], pts.M[i][1]);
+      };
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.strokeStyle = C_M;
+      ctx.globalAlpha = 0.20; ctx.lineWidth = 8.0; pathM(); ctx.stroke();   // 光晕
+      ctx.globalAlpha = 0.55; ctx.lineWidth = 4.2; pathM(); ctx.stroke();   // 中层
+      ctx.globalAlpha = 1;    ctx.lineWidth = 1.8; pathM(); ctx.stroke();   // 芯线
+      ctx.globalAlpha = 1;
+    }
+
+    // 各分项曲线（画在总力矩之上，重合处仍可见）
+    for(const sr of series){
+      const P = pts[sr.key];
+      if(P.length < 2) continue;
+      ctx.beginPath(); ctx.moveTo(P[0][0], P[0][1]);
+      for(let i=1;i<P.length;i++) ctx.lineTo(P[i][0], P[i][1]);
+      ctx.strokeStyle = sr.color;
+      ctx.lineWidth = dim(sr.key) ? 2.3 : 1.1;
+      ctx.globalAlpha = dim(sr.key) ? 1 : 0.22;
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // “积分接管”竖线
+    if(S.handover >= 0 && S.handover >= winStart && S.handover <= winEnd){
+      const hx = xOf(S.handover);
+      ctx.save(); ctx.setLineDash([4,4]);
+      ctx.strokeStyle = 'rgba(218,119,242,.7)'; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(hx, padT-4); ctx.lineTo(hx, H-padB); ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = 'rgba(218,119,242,.95)';
+      ctx.font = '600 10.5px ' + getComputedStyle(document.body).fontFamily;
+      ctx.textAlign = 'left';
+      ctx.fillText('I 接管', hx + 5, padT + 12);
+    }
+
+    // 图例（含实时数值）
+    const items = [
+      { label:'P = Kp·e',  v:S.P,  c:C_P, bold:false },
+      { label:'I = Ki·∫e', v:S.It, c:C_I, bold:false },
+      { label:'D = −Kd·ω', v:S.Dt, c:C_D, bold:false },
+      { label:'M = P+I+D', v:S.M,  c:C_M, bold:true }
+    ];
+    let lx = padL;
+    const ly = 20;
+    for(const it of items){
+      const a = (highlight === 'all' || !it.bold) ? 1 : 1;
+      ctx.globalAlpha = it.bold ? 1 : (highlight === 'all' || highlight === it.label[0] ? 1 : 0.32);
+      ctx.fillStyle = it.c;
+      ctx.fillRect(lx, ly-8, 12, 3.5);
+      ctx.font = (it.bold ? '700 ' : '600 ') + '12px ' + getComputedStyle(document.body).fontFamily;
+      const txt = it.label + '  ' + fmt(it.v, 0);
+      ctx.textAlign = 'left';
+      ctx.fillText(txt, lx + 17, ly);
+      const wdt = ctx.measureText(txt).width;
+      ctx.globalAlpha = 1;
+      lx += 17 + wdt + 30;
+    }
+
+    // 当前时刻竖线
+    if(S.t > 0){
+      const cx2 = xOf(Math.min(S.t, winEnd));
+      ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(cx2, padT); ctx.lineTo(cx2, H-padB); ctx.stroke();
+    }
+  }
+
+  /* ============ UI ============ */
+  function regime(){
+    const wn = Math.sqrt(Math.max(S.Kp, 1e-9));
+    const zeta = S.Kd === 0 ? 0 : S.Kd/(2*wn);
+    let name, color;
+    if(S.Kd === 0){ name = '无阻尼 · 纯 P'; color = '#ff6b6b'; }
+    else if(zeta < 0.999){ name = '欠阻尼 (ζ<1)'; color = '#ffd166'; }
+    else if(zeta <= 1.001){ name = '临界阻尼 (ζ=1)'; color = '#69db7c'; }
+    else { name = '过阻尼 (ζ>1)'; color = '#4dabf7'; }
+    return { wn, zeta, name, color, kdCrit: 2*wn };
+  }
+  function setBar(fillId, valId, v, maxAbs, dec){
+    const fill = $(fillId);
+    const frac = clamp(Math.abs(v)/maxAbs, 0, 1)*50;
+    if(v >= 0){ fill.style.left = '50%'; fill.style.width = frac+'%'; }
+    else { fill.style.left = (50-frac)+'%'; fill.style.width = frac+'%'; }
+    $(valId).textContent = fmt(v, dec);
+  }
+  let lastBadge = '';
+  function updateUi(){
+    const maxAbs = Math.max(Math.abs(S.P), Math.abs(S.It), Math.abs(S.Dt), Math.abs(S.M), 1);
+    setBar('fill-p', 'val-p', S.P, maxAbs, 0);
+    setBar('fill-i', 'val-i', S.It, maxAbs, 0);
+    setBar('fill-d', 'val-d', S.Dt, maxAbs, 0);
+    setBar('fill-m', 'val-m', S.M, maxAbs, 0);
+
+    $('rv-th').innerHTML = fmt(S.theta,1) + ' <small>°</small>';
+    $('rv-e').innerHTML = fmt(S.e,1) + ' <small>°</small>';
+    $('rv-w').innerHTML = fmt(S.omega,1) + ' <small>°/s</small>';
+    $('rv-I').innerHTML = fmt(S.Iacc,1) + ' <small>°·s</small>';
+    $('rv-bias').innerHTML = fmt(S.Mdist,0) + ' <small>°/s²</small>';
+    $('rv-t').innerHTML = fmt(S.t,1) + ' <small>s</small>';
+
+    const r = regime();
+    const html = `<span style="color:${r.color}">${r.name}</span> <span class="z">ζ=${r.zeta.toFixed(2)}　Kd_临界=${r.kdCrit.toFixed(1)}</span>`;
+    if(html !== lastBadge){ $('badge').innerHTML = html; lastBadge = html; }
+  }
+
+  let lastExplain = '';
+  function updateExplain(){
+    const hasD = S.Kd > 0, hasI = S.Ki > 0, hasBias = Math.abs(S.Mdist) > 1e-9;
+    let text = '', ref = '';
+    if(!hasD && !hasI){
+      text = '只有 <b>P</b>：红线就是全部力矩，<b>金色总力矩与红线完全重合</b>。因为力矩始终指向目标、方向永不反向，飞行器做等幅简谐振荡。';
+      ref = '对应笔记 第 1 节 P 控制';
+    } else if(hasD && !hasI && !hasBias){
+      text = '有了 <b>D</b>：注意蓝线在<b>角速度最大（过零）时达到峰值</b>，而红线在此时为零 —— 这正是“刹车”的时机。两者相加得到金色 M，它在接近目标时提前反向，所以不再震荡。';
+      ref = '对应笔记 第 2 节 D 控制（阻尼制动）';
+    } else if(hasD && !hasI && hasBias){
+      text = '有恒定扰动、但没有 I：稳定后蓝线（D）归零，<b>红线（P）独自扛住 M_bias</b>，所以必须保留一个偏角。看图中红线最终停在一条非零水平线上 —— 那就是稳态误差。';
+      ref = '对应笔记 第 3 节 PD 的稳态误差';
+    } else if(hasI){
+      text = '三项齐活：<b>红线（P）先出力</b>打头阵，<b>紫线（I）慢慢爬升</b>并最终接管、稳定在 −M_bias，<b>红线随之回落到 0</b>；蓝线（D）只在有角速度时出现、负责刹车。紫色竖线标出“I 接管”的时刻。';
+      ref = '对应笔记 第 3 节 积分消除稳态误差';
+    } else {
+      text = '调节下方滑块，观察三条曲线的分工与金色总和的变化。';
+    }
+    const full = '▶ ' + text + (ref ? '<div class="ref">' + ref + '</div>' : '');
+    if(full !== lastExplain){ $('explain-main').innerHTML = full; lastExplain = full; }
+  }
+
+  /* ============ 滑杆 ============ */
+  const PARAMS = [
+    { key:'Kp',       label:'Kp 比例',   tag:'p', min:0.5, max:25, step:0.1,  dec:1, unit:'',      reset:false },
+    { key:'Kd',       label:'Kd 微分',   tag:'d', min:0,   max:20, step:0.1,  dec:1, unit:'',      reset:false },
+    { key:'Ki',       label:'Ki 积分',   tag:'i', min:0,   max:10, step:0.05, dec:2, unit:'',      reset:false },
+    { key:'theta0',   label:'目标角 θ₀', tag:'',  min:-30, max:30, step:0.5,  dec:1, unit:'°',     reset:true },
+    { key:'thetaInit',label:'初始角 θ(0)',tag:'', min:-40, max:40, step:0.5,  dec:1, unit:'°',     reset:true },
+    { key:'Mdist',    label:'扰动 M_bias',tag:'', min:-80, max:80, step:1,    dec:0, unit:'°/s²',  reset:false },
+    { key:'speed',    label:'模拟速度',  tag:'',  min:0.25,max:2,  step:0.05, dec:2, unit:'×',      reset:false }
+  ];
+  const sliderEls = {};
+  const slidersBox = $('sliders');
+  for(const p of PARAMS){
+    const wrap = document.createElement('div');
+    wrap.className = 'slider';
+    const tg = p.tag ? `<span class="tg ${p.tag}">${p.tag.toUpperCase()}</span>` : '';
+    wrap.innerHTML =
+      `<div class="slider-head"><label>${tg}${p.label}</label>` +
+      `<input class="snum" type="number" step="${p.step}" min="${p.min}" max="${p.max}" value="${S[p.key]}">` +
+      `<span class="unit">${p.unit}</span></div>` +
+      `<input class="srange" type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${S[p.key]}">`;
+    const range = wrap.querySelector('.srange');
+    const num = wrap.querySelector('.snum');
+    let lock = false;
+    const onVal = v => {
+      v = clamp(v, p.min, p.max);
+      num.value = v.toFixed(p.dec); range.value = v;
+      S[p.key] = v;
+      if(p.reset) reset();
+      if(p.key === 'Kp' || p.key === 'Kd' || p.key === 'Ki' || p.key === 'Mdist') manualCap();
+    };
+    range.addEventListener('input', () => { if(lock) return; lock = true; onVal(parseFloat(range.value)); lock = false; });
+    num.addEventListener('input', () => {
+      if(lock) return; lock = true;
+      let v = parseFloat(num.value); if(!isFinite(v)) v = S[p.key];
+      onVal(v); lock = false;
+    });
+    sliderEls[p.key] = { range, num };
+    slidersBox.appendChild(wrap);
+  }
+  function syncSliders(){
+    for(const p of PARAMS){
+      sliderEls[p.key].range.value = S[p.key];
+      sliderEls[p.key].num.value = S[p.key].toFixed(p.dec);
+    }
+  }
+
+  /* ============ 突出显示按钮 ============ */
+  const hlIds = [
+    { id:'all', label:'全部' },
+    { id:'P',   label:'只看 P' },
+    { id:'I',   label:'只看 I' },
+    { id:'D',   label:'只看 D' }
+  ];
+  const hlBox = $('hlBtns');
+  hlIds.forEach((h, i) => {
+    const b = document.createElement('button');
+    b.className = 'hlbtn' + (i === 0 ? ' active' : '');
+    b.textContent = h.label;
+    b.addEventListener('click', () => {
+      highlight = h.id;
+      [...hlBox.querySelectorAll('.hlbtn')].forEach((x,j) => x.classList.toggle('active', j === i));
+    });
+    hlBox.appendChild(b);
+  });
+
+  /* ============ 预设 ============ */
+  const PRESETS = [
+    { name:'① 只有 P', dur:8000,
+      set:{Kp:9, Kd:0, Ki:0, theta0:0, thetaInit:20, Mdist:0},
+      cap:'纯 P：金色 M 与红色 P 完全重合 —— 全部力矩都由 P 提供，所以方向永不反向，等幅振荡。' },
+    { name:'② 加上 D', dur:8000,
+      set:{Kp:9, Kd:6, Ki:0, theta0:0, thetaInit:20, Mdist:0},
+      cap:'D 项在角速度最大（过零）时达到峰值，正好在 P 归零时“刹车”；两项相加后 M 提前反向，振荡消失。' },
+    { name:'③ 再加上 I', dur:9000,
+      set:{Kp:9, Kd:6, Ki:4, theta0:15, thetaInit:0, Mdist:0},
+      cap:'阶跃目标 0→15°：P 瞬间跳出大值，D 随之制动，I 从零慢慢累积、最后把残余误差磨到零。' },
+    { name:'④ PD 顶不住扰动', dur:9000,
+      set:{Kp:9, Kd:6, Ki:0, theta0:0, thetaInit:20, Mdist:45},
+      cap:'有恒定扰动却没有 I：稳定后 D 归零，红色 P 只能停在一个非零值上硬扛 M_bias —— 稳态误差。' },
+    { name:'⑤ 积分接管', dur:11500,
+      set:{Kp:9, Kd:6, Ki:4, theta0:0, thetaInit:20, Mdist:45},
+      cap:'P 先出力，I 慢慢爬升并最终接管，稳定在 −M_bias；红色 P 随之回落到 0。紫色竖线就是“I 接管”的时刻。' },
+    { name:'⑥ Ki 过大 → 积分过冲', dur:10000,
+      set:{Kp:9, Kd:6, Ki:8, theta0:0, thetaInit:20, Mdist:45},
+      cap:'Ki 太大：I 冲到 −95 才回头（远超需要的 −45），带着整机冲过目标 —— 这就是积分过冲 / 积分饱和的由来。' }
+  ];
+  const pillsBox = $('pills');
+  const captionEl = $('caption');
+  function showCap(i){
+    if(i < 0){ captionEl.classList.add('hide'); return; }
+    captionEl.classList.remove('hide');
+    captionEl.innerHTML = `<span class="stage">阶段 ${i+1}/${PRESETS.length} · ${PRESETS[i].name}</span>${PRESETS[i].cap}`;
+  }
+  function manualCap(){
+    captionEl.classList.remove('hide');
+    captionEl.innerHTML = '<span class="stage">手动调节</span>拖动滑杆观察三项贡献怎么变；点击上方预设可恢复剧情讲解。';
+  }
+  PRESETS.forEach((d,i) => {
+    const b = document.createElement('button');
+    b.className = 'pill';
+    b.textContent = d.name;
+    b.addEventListener('click', () => { stopDemo(); applySet(d.set); reset(); markPill(i); showCap(i); });
+    pillsBox.appendChild(b);
+  });
+  function markPill(i){ [...pillsBox.children].forEach((el,j) => el.classList.toggle('active', j === i)); }
+  function applySet(obj){ for(const k in obj) S[k] = obj[k]; syncSliders(); }
+
+  const demo = { active:false, idx:-1, start:0 };
+  function applyStage(i){ demo.idx = i; demo.start = performance.now(); applySet(PRESETS[i].set); reset(); markPill(i); highlight = 'all'; showCap(i); }
+  function startDemo(){ demo.active = true; applyStage(0); $('demoBtn').textContent = '■ 停止演示'; }
+  function stopDemo(){ demo.active = false; $('demoBtn').textContent = '▶ 自动演示全过程'; markPill(-1); }
+  function tickDemo(now){
+    if(!demo.active) return;
+    if(now - demo.start >= PRESETS[demo.idx].dur){
+      if(demo.idx+1 < PRESETS.length) applyStage(demo.idx+1);
+      else { demo.active = false; $('demoBtn').textContent = '▶ 自动演示全过程'; }
+    }
+  }
+  $('demoBtn').addEventListener('click', () => demo.active ? stopDemo() : startDemo());
+  $('prevBtn').addEventListener('click', () => {
+    const i = clamp((demo.idx < 0 ? 0 : demo.idx) - 1, 0, PRESETS.length-1);
+    stopDemo(); applySet(PRESETS[i].set); reset(); markPill(i); showCap(i);
+  });
+  $('nextBtn').addEventListener('click', () => {
+    const i = clamp((demo.idx < 0 ? -1 : demo.idx) + 1, 0, PRESETS.length-1);
+    stopDemo(); applySet(PRESETS[i].set); reset(); markPill(i); showCap(i);
+  });
+
+  /* ============ 主循环 ============ */
+  function render(){
+    drawBig(); drawPreview(); updateUi(); updateExplain();
+  }
+  let lastNow = performance.now();
+  function frame(now){
+    let real = Math.min(0.05, (now-lastNow)/1000);
+    lastNow = now;
+    if(S.running) advance(real);
+    tickDemo(now);
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  /* ============ 事件 ============ */
+  const playBtn = $('playBtn');
+  playBtn.addEventListener('click', () => {
+    S.running = !S.running;
+    playBtn.textContent = S.running ? '⏸ 暂停' : '▶ 播放';
+  });
+  $('resetBtn').addEventListener('click', () => { stopDemo(); reset(); });
+  window.addEventListener('keydown', e => {
+    if(e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if(e.code === 'Space'){ e.preventDefault(); playBtn.click(); }
+    else if(e.key === 'r' || e.key === 'R'){ stopDemo(); reset(); }
+    else if(e.key === 'ArrowRight'){ $('nextBtn').click(); }
+    else if(e.key === 'ArrowLeft'){ $('prevBtn').click(); }
+  });
+
+  /* ============ 启动 ============ */
+  syncSliders();
+  reset();
+  requestAnimationFrame(frame);
+  applySet(PRESETS[0].set); reset(); markPill(0); showCap(0);
+})();
+</script>
+</body>
+</html>
