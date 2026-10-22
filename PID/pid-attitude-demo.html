@@ -78,13 +78,6 @@
   /* 场景 */
   .scene-wrap{flex:1 1 auto; min-height:0; position:relative}
   .scene-wrap canvas{position:absolute; inset:0; width:100%; height:100%; display:block}
-  .caption{
-    position:absolute; left:12px; right:12px; top:11px; z-index:5;
-    background:rgba(9,13,20,.9); border:1px solid var(--border2); border-radius:10px;
-    padding:9px 13px; font-size:12.5px; line-height:1.55; color:var(--text);
-    box-shadow:var(--shadow); backdrop-filter:blur(6px);
-  }
-  .caption .stage{color:var(--accent); font-weight:700; margin-right:8px; font-size:11.5px; letter-spacing:.3px}
   .scene-foot{flex:none; border-top:1px solid var(--border); padding:9px 13px 11px; display:flex; flex-direction:column; gap:9px}
   .readout{display:flex; gap:7px; flex-wrap:wrap}
   .chip{
@@ -210,7 +203,6 @@
     </div>
     <div class="scene-wrap">
       <canvas id="scene"></canvas>
-      <div class="caption" id="caption"></div>
     </div>
     <div class="scene-foot">
       <div class="readout">
@@ -388,23 +380,17 @@
   /* ================= 预设剧情 ================= */
   const PRESETS = [
     { name:'① 纯 P',       dur:8200,
-      set:{Kp:9, Kd:0,  Ki:0, theta0:0, A0:20, Mdist:0},
-      cap:'纯 P 只按“现在”的偏差出力 → 力矩方向永不反向，冲过目标也不刹车，做<b>等幅简谐振荡</b>，永不停息。这正是笔记第 1 节的 θ(t)=θ₀+A·cos(ωt)。' },
+      set:{Kp:9, Kd:0,  Ki:0, theta0:0, A0:20, Mdist:0} },
     { name:'② PD 欠阻尼',  dur:8200,
-      set:{Kp:9, Kd:2,  Ki:0, theta0:0, A0:20, Mdist:0},
-      cap:'加入 D（微分）= 提前刹车。Kd 偏小 → 动能没吸干净，仍会<b>过冲、来回摆动几次</b>，振幅按 e^(−ζωn t) 的包络等比衰减。右侧四条曲线 θ(t)/e(t)/ω(t)/α(t) 就是笔记那张四宫格图的角量版本，拖动 Kd 看它们怎么变。' },
+      set:{Kp:9, Kd:2,  Ki:0, theta0:0, A0:20, Mdist:0} },
     { name:'③ PD 临界',    dur:7000,
-      set:{Kp:9, Kd:6,  Ki:0, theta0:0, A0:20, Mdist:0},
-      cap:'Kd 恰好 = 2√(Kp·I) → <b>临界阻尼</b>，一次把动能吸干：<b>无过冲、无振荡、最快</b>回到目标。解析解 θ(t)=θ₀+A(1+γt)e^(−γt)（γ=Kd/2I），正是那张四宫格参考图。' },
+      set:{Kp:9, Kd:6,  Ki:0, theta0:0, A0:20, Mdist:0} },
     { name:'④ PD 过阻尼',  dur:8200,
-      set:{Kp:9, Kd:15, Ki:0, theta0:0, A0:20, Mdist:0},
-      cap:'Kd 过大 → 稍有一点角速度就被巨大 D 项刹住，像陷进蜂蜜，<b>缓慢爬回</b>目标，响应迟钝。' },
+      set:{Kp:9, Kd:15, Ki:0, theta0:0, A0:20, Mdist:0} },
     { name:'⑤ PD + 扰动',  dur:9000,
-      set:{Kp:9, Kd:6,  Ki:0, theta0:0, A0:20, Mdist:45},
-      cap:'存在恒定外力矩（重心偏移 / 单向侧风）时，PD 稳定后必须靠 <b>残余偏角</b>产生 P 力矩去抵消它 → <b>稳态误差 e = M_bias / Kp</b>，永远消不掉。' },
+      set:{Kp:9, Kd:6,  Ki:0, theta0:0, A0:20, Mdist:45} },
     { name:'⑥ PID 消静差', dur:11500,
-      set:{Kp:9, Kd:6,  Ki:4, theta0:0, A0:20, Mdist:45},
-      cap:'加上 I（积分）：只要还有一点误差，积分就持续累加出力，最终积分项<b>单独顶住 M_bias</b>，误差归零（e→∞ = 0）。' }
+      set:{Kp:9, Kd:6,  Ki:4, theta0:0, A0:20, Mdist:45} }
   ];
 
   const pillsBox = $('pills');
@@ -412,7 +398,7 @@
     const b = document.createElement('button');
     b.className = 'pill';
     b.textContent = d.name;
-    b.addEventListener('click', () => { stopDemo(); applySet(d.set); reset(); markPill(i); showCap(i); });
+    b.addEventListener('click', () => { stopDemo(); applySet(d.set); reset(); markPill(i); });
     pillsBox.appendChild(b);
   });
   function markPill(i){
@@ -420,25 +406,18 @@
   }
   function applySet(obj){ for(const k in obj) S[k] = obj[k]; syncSliders(); }
 
-  const captionEl = $('caption');
-  function showCap(i){
-    if(i < 0){ captionEl.style.display = 'none'; return; }
-    captionEl.style.display = 'block';
-    captionEl.innerHTML = `<span class="stage">阶段 ${i+1}/${PRESETS.length} · ${PRESETS[i].name}</span>${PRESETS[i].cap}`;
-  }
-
   /* 自动演示 */
   const demo = { active:false, idx:-1, start:0 };
   function applyStage(i){
     demo.idx = i; demo.start = performance.now();
-    applySet(PRESETS[i].set); reset(); markPill(i); showCap(i);
+    applySet(PRESETS[i].set); reset(); markPill(i);
   }
   function startDemo(){ demo.active = true; applyStage(0); $('demoBtn').textContent = '■ 停止演示'; }
   function stopDemo(){
-    if(!demo.active && demo.idx < 0){ captionEl.style.display = 'none'; return; }
+    if(!demo.active && demo.idx < 0){ return; }
     demo.active = false;
     $('demoBtn').textContent = '▶ 自动演示全过程';
-    markPill(-1); showCap(-1);
+    markPill(-1);
   }
   function tickDemo(now){
     if(!demo.active) return;
@@ -451,12 +430,12 @@
   $('prevBtn').addEventListener('click', () => {
     const i = clamp((demo.idx < 0 ? 0 : demo.idx) - 1, 0, PRESETS.length - 1);
     demo.active = false; $('demoBtn').textContent = '▶ 自动演示全过程';
-    applySet(PRESETS[i].set); reset(); markPill(i); showCap(i);
+    applySet(PRESETS[i].set); reset(); markPill(i);
   });
   $('nextBtn').addEventListener('click', () => {
     const i = clamp((demo.idx < 0 ? -1 : demo.idx) + 1, 0, PRESETS.length - 1);
     demo.active = false; $('demoBtn').textContent = '▶ 自动演示全过程';
-    applySet(PRESETS[i].set); reset(); markPill(i); showCap(i);
+    applySet(PRESETS[i].set); reset(); markPill(i);
   });
 
   /* ================= 仿真 ================= */
@@ -900,7 +879,7 @@
   requestAnimationFrame(frame);
 
   // 初始展示「纯 P」剧情，紧扣笔记第一个演示点
-  applySet(PRESETS[0].set); reset(); markPill(0); showCap(0);
+  applySet(PRESETS[0].set); reset(); markPill(0);
   window.addEventListener('resize', () => { /* surface() 自适应，无需额外处理 */ });
 })();
 </script>
